@@ -118,3 +118,22 @@ kdocs-tool/
 - **游戏大小**：优先级 `bl 抓取 > 文本识别(如 30.7G) > 手填`。
 - **数据写入是真实多维表**：录入前请确认 `lib/config.js` 的 `FILE_ID` 指向正确表格。
 - **不要修改 `E:\工作空间\netdisk-hub`**：本工具仅参考其风格，逻辑独立。
+
+---
+
+## 八、推送到 GitHub（远程仓库尚未创建时）
+
+本仓库已 `git init` 并完成首次提交（本地 `main` 分支），`.gitignore` 已排除 `node_modules`/`logs`/`*.zip`/`*.lnk` 等。远程 `origin` 已指向 `git@github.com:likuan250-hash/kdocs-tool.git`，但**远程仓库需在 GitHub 网页先行创建**（本机无 GitHub PAT，无法自动建仓）：
+
+1. 打开 https://github.com/new ，仓库名填 `kdocs-tool`，**不要**勾选初始化 README / .gitignore（保持空仓库）。
+2. 双击仓库内的 `PUSH_TO_GITHUB.bat`（脚本会先检测仓库是否存在，存在才推送）。
+3. 本机 SSH key 已配置，可直接推送，无需再输密码。
+
+> 若希望由 AI 直接完成「建仓 + 推送」，请提供 GitHub Personal Access Token（勾选 `repo` 权限），或在本机终端执行一次 `gh auth login` 后告知即可。
+
+克隆到另一台电脑：
+
+```bash
+git clone git@github.com:likuan250-hash/kdocs-tool.git
+cd kdocs-tool && npm install
+```
