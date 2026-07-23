@@ -60,6 +60,25 @@
       transition: transform 0.2s ease, background 0.2s ease;
     }
     .theme-btn:hover { transform: translateY(-2px); background: rgba(255,255,255,0.12); }
+    .ver-badge {
+      border: 1px solid var(--glass-border); background: var(--glass-bg);
+      color: var(--text-dim); border-radius: 12px; padding: 8px 14px;
+      cursor: pointer; font-size: 13px; backdrop-filter: blur(16px);
+      transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+      font-family: "Cascadia Code", "JetBrains Mono", monospace; white-space: nowrap;
+    }
+    .ver-badge:hover { transform: translateY(-2px); background: rgba(255,255,255,0.12); }
+    .ver-badge.latest { color: var(--ok); }
+    .ver-badge.checking { color: var(--accent-2); }
+    .ver-badge.has-update {
+      color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      border-color: transparent; box-shadow: 0 6px 20px rgba(124,92,255,0.4);
+      animation: badgePulse 1.6s ease-in-out infinite;
+    }
+    @keyframes badgePulse {
+      0%, 100% { box-shadow: 0 6px 20px rgba(124,92,255,0.4); }
+      50% { box-shadow: 0 6px 28px rgba(33,212,253,0.65); }
+    }
 
     .status-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
     .chip {
@@ -187,6 +206,7 @@
       </div>
     </div>
     <div class="header-actions">
+      <button class="ver-badge" id="verBadge" title="点击检查更新">v?</button>
       <button class="theme-btn" id="themeBtn">🌗 主题</button>
     </div>
   </header>
