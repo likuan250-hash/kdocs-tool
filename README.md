@@ -83,6 +83,7 @@ kdocs-cli-bin/kdocs-cli.exe auth login
 | 多维表 `sheet_id` | `lib/config.js` 的 `SHEET_ID` | 1 |
 | 封面下载目录 | `lib/steam.js` 的 `DEFAULT_COVER_DIR` | `E:\游戏网站建设` |
 | 单实例锁端口（控制面板） | `control_panel_tk.py` 的 `LOCK_PORT` | 39112（避开 netdisk-hub 的 39111） |
+| SteamGridDB 兜底封面 key（可选） | 环境变量 `STEAMGRIDDB_API_KEY`（见 `.env.example`） | 空 = 关闭该兜底源 |
 
 ---
 
@@ -94,6 +95,7 @@ kdocs-tool/
 ├─ lib/
 │  ├─ parser.js      # 解析输入文本（名称/标签/链接/大小/封面链接）
 │  ├─ steam.js       # Steam AppID 搜索 + 多源封面下载（cloudflare 优先）
+│  ├─ coverdb.js     # SteamGridDB 兜底封面（按游戏名搜，需免费 API key）
 │  ├─ ai.js          # bl 封装：生成介绍 + 抓大小 + 搜封面直链
 │  ├─ kdocs.js       # kdocs-cli 调用封装（优先用自带 CLI）
 │  ├─ executor.js    # 编排：查重→介绍→封面→上传→建记录
@@ -114,7 +116,7 @@ kdocs-tool/
 
 - **金山文档鉴权是机器绑定**：换电脑必须重新 `kdocs-cli auth login`，克隆代码不会带登录态。
 - **`bl` 为内部工具**：需自备并在 PATH；沙箱/无 `bl` 环境 `blAvailable` 为 false，介绍/大小/封面会走文本识别+手填兜底，流程不崩。
-- **非 Steam 游戏封面**：靠 `bl` 搜官方封面直链，质量取决于 bl 返回；若下载失败自动跳过封面（不报错）。也可在网页「封面链接」手动粘贴。
+- **非 Steam 游戏封面**：优先 `bl` 搜官方封面直链；`bl` 未给时若配置了 `STEAMGRIDDB_API_KEY`，会自动用 SteamGridDB 按游戏名搜竖版网格图兜底；都没有则跳过封面（不报错）。也可在网页「封面链接」手动粘贴。
 - **游戏大小**：优先级 `bl 抓取 > 文本识别(如 30.7G) > 手填`。
 - **数据写入是真实多维表**：录入前请确认 `lib/config.js` 的 `FILE_ID` 指向正确表格。
 - **不要修改 `E:\工作空间\netdisk-hub`**：本工具仅参考其风格，逻辑独立。
