@@ -17,7 +17,9 @@ function baseDeps(over = {}) {
   let lastCreate = null;
   let downloadCoverCount = 0;
   let downloadFromUrlCount = 0;
+  const calls = [];
   const deps = {
+    calls,
     checkKdocsReady: () => true,
     searchSteamAppId: async () => null,
     aiDescribe: () => ({ intro: "Hazelight 开发的双人合作冒险游戏。", size: "30.7G", coverUrl: "https://cdn.x.com/a.jpg" }),
@@ -26,11 +28,13 @@ function baseDeps(over = {}) {
     searchCoverByGameName: async () => null,
     fileBase64: () => "base64data",
     callMcporter: (fn, args) => {
+      calls.push({ fn, args });
+      if (fn === "upload_attachment") return { object_id: "obj1" };
       if (fn === "dbsheet.create_records") lastCreate = args.records[0].fields;
       return { data: { records: [{ id: "r1" }] } };
     },
     fs: { statSync: () => ({ size: 1234 }) },
-    _state: () => ({ lastCreate, downloadCoverCount, downloadFromUrlCount }),
+    _state: () => ({ lastCreate, downloadCoverCount, downloadFromUrlCount, calls }),
     ...over,
   };
   return deps;
@@ -95,4 +99,60 @@ test("封面优先级：bl 推荐优先，Steam 兜底不被调用", async () =>
   const { downloadCoverCount, downloadFromUrlCount } = deps._state();
   assert.strictEqual(downloadFromUrlCount, 1, "bl 推荐封面应被下载");
   assert.strictEqual(downloadCoverCount, 0, "已有 bl 封面时不应再走 Steam 兜底");
+});
+
+test("需求：先查重（list_records）再创建记录，且顺序正确", async () => {
+  const deps = baseDeps();
+  await autoExecute(baseParsed(), null, "/tmp", { deps });
+  const fns = deps._state().calls.filter(c => c.fn === "dbsheet.list_records" || c.fn === "dbsheet.create_records").map(c => c.fn);
+  assert.ok(fns.includes("dbsheet.list_records"), "应调用查重");
+  assert.ok(fns.includes("dbsheet.create_records"), "应创建记录");
+  assert.ok(fns.indexOf("dbsheet.list_records") < fns.indexOf("dbsheet.create_records"), "查重必须在创建之前");
+});
+
+test("需求：创建记录后调用 get_record 验证", async () => {
+  const deps = baseDeps();
+  await autoExecute(baseParsed(), null, "/tmp", { deps });
+  const get = deps._state().calls.find(c => c.fn === "dbsheet.get_record");
+  assert.ok(get, "应调用 get_record 验证记录");
+  assert.strictEqual(get.args.record_id, "r1");
+});
+
+test("需求：附件上传参数正确（文件名含游戏名、类型、base64）", async () => {
+  const deps = baseDeps();
+  await autoExecute(baseParsed({ quarkUrl: "https://pan.quark.cn/s/x" }), null, "/tmp", { deps });
+  const up = deps._state().calls.find(c => c.fn === "upload_attachment");
+  assert.ok(up, "应上传附件");
+  assert.ok(up.args.filename.includes("双影奇境"), "文件名应含游戏名");
+  assert.strictEqual(up.args.content_type, "image/jpeg");
+  assert.ok(up.args.content_base64 && up.args.content_base64.length > 0, "应包含 base64 内容");
+});
+
+test("需求：创建记录字段完整（游戏信息/更新日期/作品展示/网盘数组）", async () => {
+  const deps = baseDeps();
+  const res = await autoExecute(baseParsed({ tags: ["PC游戏", "动作"], baiduUrl: "https://pan.baidu.com/s/b" }), null, "/tmp", { deps });
+  const f = deps._state().lastCreate;
+  assert.deepStrictEqual(f["游戏信息"], ["PC游戏", "动作"], "游戏信息应为标签数组");
+  assert.ok(/^\d{4}\/\d{2}\/\d{2}$/.test(f["更新日期"]), "更新日期应为 YYYY/MM/DD");
+  assert.ok(f["作品展示"] && f["作品展示"][0].uploadId === "obj1" && f["作品展示"][0].source === "upload_ks3", "应带作品展示附件");
+  assert.deepStrictEqual(f["百度网盘"], [{ address: "https://pan.baidu.com/s/b", displayText: "https://pan.baidu.com/s/b" }], "百度网盘应为地址数组");
+});
+
+test("需求：非 Steam 且无 bl 封面 → 仍尝试 SteamGridDB 兜底（不静默放弃）", async () => {
+  const deps = baseDeps({ aiDescribe: () => ({ intro: "x".repeat(20), size: "10G", coverUrl: "" }) });
+  const res = await autoExecute(baseParsed(), null, "/tmp", { deps });
+  const sgdbStep = res.steps.find(s => s.name === "SteamGridDB 封面");
+  assert.ok(sgdbStep, "应有 SteamGridDB 兜底步骤（符合需求：封面必须尝试获取）");
+});
+
+// ── 需求冲突点（已知行为，待用户确认是否改为失败）──
+// 用户需求：bl / 兜底必须给封面。但当前 success 判定为「全成功或跳过」，
+// 封面所有源失败仅记为「跳过」，仍会创建无作品展示的记录。
+test("需求GAP：封面所有源失败 → 当前仍判 success 且不含作品展示（待确认）", async () => {
+  const deps = baseDeps({ aiDescribe: () => ({ intro: "x".repeat(20), size: "10G", coverUrl: "" }) });
+  const res = await autoExecute(baseParsed(), null, "/tmp", { deps });
+  const coverSteps = res.steps.filter(s => s.name.includes("封面"));
+  assert.ok(coverSteps.length >= 1 && coverSteps.every(s => s.status === "跳过"), "封面应全部跳过");
+  assert.strictEqual(res.success, true, "（已知行为）封面缺失仍判成功，与「必须有封面」需求冲突");
+  assert.ok(!("作品展示" in deps._state().lastCreate), "无封面则不应有作品展示");
 });

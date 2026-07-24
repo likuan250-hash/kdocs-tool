@@ -40,3 +40,20 @@ test("大小带单位 TB/MB 均识别", () => {
 test("空输入返回 null", () => {
   assert.strictEqual(parseInput("   \n  "), null);
 });
+
+test("多标签逗号/空格分隔均识别", () => {
+  const p = parseInput("测试游戏\n标签：动作,角色扮演,单机");
+  assert.ok(p.tags.includes("动作") && p.tags.includes("角色扮演") && p.tags.includes("单机"));
+  const p2 = parseInput("测试游戏\n标签：射击 冒险 RPG");
+  assert.ok(p2.tags.includes("射击") && p2.tags.includes("冒险") && p2.tags.includes("RPG"));
+});
+
+test("「大小：」前缀提取游戏大小", () => {
+  assert.strictEqual(parseInput("a\n大小：30.7G").size, "30.7G");
+  assert.strictEqual(parseInput("a\n大小: 512MB").size, "512MB");
+});
+
+test("提取英文名（无中文括号时为空）", () => {
+  assert.strictEqual(parseInput("Hades II").englishName, "");
+  assert.strictEqual(parseInput("黑神话悟空（Black Myth Wukong）").englishName, "Black Myth Wukong");
+});
