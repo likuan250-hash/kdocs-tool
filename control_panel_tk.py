@@ -509,13 +509,20 @@ def main():
 if __name__ == "__main__":
     # 若以控制台方式运行(被 python 而非 pythonw 启动,会带一个黑窗),
     # 自动用 pythonw 重新拉起自己消除黑窗。pythonw 下 sys.stdout 为 None,不会重复触发。
+    # 但只在本机存在「能真正创建 Tk 窗口」的 pythonw 时才重拉, 避免某些精简/托管版
+    # pythonw 能 import tkinter 却缺 tcl 运行时导致静默崩溃。
     if sys.stdout is not None:
         import shutil
         pw = shutil.which("pythonw") or shutil.which("pythonw.exe")
         if pw:
             try:
-                subprocess.Popen([pw, os.path.abspath(__file__)])
-                sys.exit(0)
+                _ok = subprocess.run(
+                    [pw, "-c", "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()"],
+                    capture_output=True, timeout=10,
+                ).returncode == 0
+                if _ok:
+                    subprocess.Popen([pw, os.path.abspath(__file__)])
+                    sys.exit(0)
             except Exception:
                 pass
     main()
