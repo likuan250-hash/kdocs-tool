@@ -117,22 +117,22 @@ router.get("/api/search-steam", async (req, res) => {
 });
 
 router.post("/api/generate", async (req, res) => {
-  const { text, manualSize, manualCoverUrl } = req.body;
+  const { text, manualCoverUrl } = req.body;
   if (!text) return res.status(400).json({ error: "请输入游戏信息" });
   const parsed = parseInput(text);
   if (!parsed) return res.status(400).json({ error: "无法解析输入" });
   // 先搜 Steam，让生成指令里的封面/标签说明与实际一致
   const steamAppId = await searchSteamAppId(parsed.gameName);
-  res.json({ prompt: buildPrompt(parsed, steamAppId, (manualSize || "").trim(), (manualCoverUrl || "").trim()), parsed });
+  res.json({ prompt: buildPrompt(parsed, steamAppId, (manualCoverUrl || "").trim()), parsed });
 });
 
 router.post("/api/auto", async (req, res) => {
-  const { text, coverDir, manualSize, manualCoverUrl } = req.body;
+  const { text, coverDir, manualCoverUrl } = req.body;
   if (!text) return res.status(400).json({ error: "请输入游戏信息" });
   const parsed = parseInput(text);
   if (!parsed) return res.status(400).json({ error: "无法解析输入" });
   try {
-    const result = await autoExecute(parsed, null, coverDir, { manualSize, manualCoverUrl });
+    const result = await autoExecute(parsed, null, coverDir, { manualCoverUrl });
     res.json({ ...result, gameName: parsed.gameName });
   } catch (e) {
     res.status(500).json({ error: e.message, gameName: parsed.gameName });

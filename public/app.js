@@ -1,5 +1,5 @@
 ﻿const $ = id => document.getElementById(id);
-const gameInput = $("gameInput"), gameSize = $("gameSize"), coverUrl = $("coverUrl");
+const gameInput = $("gameInput"), coverUrl = $("coverUrl");
 const autoBtn = $("autoBtn"), coverDir = $("coverDir"), browseDirBtn = $("browseDirBtn");
 const generateBtn = $("generateBtn"), clearBtn = $("clearBtn");
 const preview = $("preview"), previewContent = $("previewContent");
@@ -56,7 +56,6 @@ exampleToggle.onclick = () => {
 // ── 清空 ──
 clearBtn.onclick = () => {
   gameInput.value = "";
-  gameSize.value = "";
   coverUrl.value = "";
   preview.style.display = "none";
   outputCard.classList.remove("show");
@@ -100,18 +99,12 @@ function parseInput(text) {
   if (first.includes("联机") || first.includes("合作")) tags.push("联机合作");
   if (!tags.includes("虚拟机版")) tags.unshift("PC游戏");
 
-  let size = "";
-  for (const line of lines) {
-    const sm = line.match(/(?:大小|容量|体积)\s*[:：]?\s*(\d+(?:\.\d+)?\s*(?:GB|G|TB|T|MB|M|KB|K)\b)/i)
-            || line.match(/(\d+(?:\.\d+)?\s*(?:GB|G|TB|T|MB|M|KB|K)\b)/i);
-    if (sm) { size = sm[1].trim().replace(/\s+/g, ""); break; }
-  }
   let cover = "";
   for (const line of lines) {
     const cm = line.match(/(?:封面|cover)?\s*[:：]?\s*(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif))(?:\?[^)\s]*)?/i);
     if (cm) { cover = cm[1]; break; }
   }
-  return { gameName: name, englishName: en, baiduUrl: b, quarkUrl: q, xunleiUrl: x, tags, raw: first, size, coverUrl: cover };
+  return { gameName: name, englishName: en, baiduUrl: b, quarkUrl: q, xunleiUrl: x, tags, raw: first, coverUrl: cover };
 }
 
 function renderPreview(p) {
@@ -119,7 +112,6 @@ function renderPreview(p) {
   const rows = [
     `<span class="label">🎮 游戏</span><span class="value">${esc(p.gameName)}${p.englishName ? "（" + esc(p.englishName) + "）" : ""}</span>`,
     `<span class="label">🏷️ 标签</span><span class="value">${th}</span>`,
-    p.size ? `<span class="label">📦 大小</span><span class="value">${esc(p.size)}</span>` : "",
     p.coverUrl ? `<span class="label">🖼️ 封面</span><span class="value">${esc(p.coverUrl)}</span>` : "",
     p.baiduUrl ? `<span class="label">🔗 百度</span><span class="value">${esc(p.baiduUrl)}</span>` : "",
     p.quarkUrl ? `<span class="label">🔗 夸克</span><span class="value">${esc(p.quarkUrl)}</span>` : "",
@@ -138,7 +130,7 @@ generateBtn.onclick = async () => {
   generateBtn.textContent = "⏳";
   outputCard.classList.remove("show");
   try {
-    const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, manualSize: gameSize.value.trim(), manualCoverUrl: coverUrl.value.trim() }) });
+    const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, manualCoverUrl: coverUrl.value.trim() }) });
     const d = await r.json();
     if (d.error) { toastMsg(d.error, "err"); return; }
     currentParsed = d.parsed;
@@ -185,7 +177,7 @@ autoBtn.onclick = async () => {
   addLog("info", "🚀 开始一键执行...");
 
   try {
-    const r = await fetch("/api/auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, coverDir: coverDir.value.trim() || undefined, manualSize: gameSize.value.trim(), manualCoverUrl: coverUrl.value.trim() }) });
+    const r = await fetch("/api/auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, coverDir: coverDir.value.trim() || undefined, manualCoverUrl: coverUrl.value.trim() }) });
     const d = await r.json();
 
     if (d.error) {

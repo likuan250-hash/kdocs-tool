@@ -58,21 +58,16 @@ test("正常流程字段映射正确", async () => {
   assert.strictEqual(lastCreate["夸克网盘"][0].address, "https://pan.quark.cn/s/x");
 });
 
-test("游戏大小优先级：ai.size > parsed.size > manualSize", async () => {
+test("游戏大小优先级：ai.size > parsed.size > quarkSize", async () => {
   // ai 优先
   let deps = baseDeps({ aiDescribe: () => ({ intro: "x".repeat(20), size: "10G", coverUrl: "" }) });
-  let r = await autoExecute(baseParsed({ size: "5G" }), null, "/tmp", { deps, manualSize: "1G" });
+  await autoExecute(baseParsed({ size: "5G" }), null, "/tmp", { deps });
   assert.strictEqual(deps._state().lastCreate["游戏大小"], "10G");
 
   // ai 空 → parsed 优先
   deps = baseDeps({ aiDescribe: () => ({ intro: "x".repeat(20), size: "", coverUrl: "" }) });
-  r = await autoExecute(baseParsed({ size: "5G" }), null, "/tmp", { deps, manualSize: "1G" });
+  await autoExecute(baseParsed({ size: "5G" }), null, "/tmp", { deps });
   assert.strictEqual(deps._state().lastCreate["游戏大小"], "5G");
-
-  // 都空 → manual 兜底
-  deps = baseDeps({ aiDescribe: () => ({ intro: "x".repeat(20), size: "", coverUrl: "" }) });
-  r = await autoExecute(baseParsed({ size: "" }), null, "/tmp", { deps, manualSize: "1G" });
-  assert.strictEqual(deps._state().lastCreate["游戏大小"], "1G");
 });
 
 test("含免责声明的介绍被丢弃，用原始名兜底", async () => {
@@ -82,14 +77,13 @@ test("含免责声明的介绍被丢弃，用原始名兜底", async () => {
   assert.strictEqual(lastCreate["游戏介绍"], "双影奇境（Split Fiction）");
 });
 
-test("大小缺失且有网盘链接 → 步骤提示手动填写", async () => {
+test("大小缺失时不再提示手动填写，直接不写入游戏大小字段", async () => {
   const deps = baseDeps({ aiDescribe: () => ({ intro: "x".repeat(20), size: "", coverUrl: "" }) });
   const res = await autoExecute(baseParsed({ quarkUrl: "https://pan.quark.cn/s/x" }), null, "/tmp", { deps });
   const sizeStep = res.steps.find(s => s.name === "游戏大小抓取");
-  assert.ok(sizeStep, "应有游戏大小抓取步骤");
-  assert.strictEqual(sizeStep.status, "跳过");
-  assert.ok(sizeStep.reason.includes("请手动填写"));
+  assert.strictEqual(sizeStep, undefined, "不应再出现游戏大小抓取提示步骤");
   assert.ok(!("游戏大小" in deps._state().lastCreate));
+  assert.strictEqual(res.success, true, "大小缺失不应导致失败");
 });
 
 test("封面优先级：bl 推荐优先，Steam 兜底不被调用", async () => {
