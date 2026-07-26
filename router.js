@@ -38,6 +38,19 @@ function gitSync(args, timeoutMs = 20000) {
     return null;
   }
 }
+// 与 gitSync 类似, 但失败时返回真实 stderr, 便于前端展示确切原因(SSH 凭证/网络/代理等)
+function gitSyncDetail(args, timeoutMs = 20000) {
+  try {
+    const out = execFileSync("git", args, {
+      cwd: __dirname, windowsHide: true, encoding: "utf8", timeout: timeoutMs,
+    });
+    return { ok: true, out: (out || "").trim(), err: "" };
+  } catch (e) {
+    const raw = (e && (e.stderr || e.stdout)) || (e && e.message) || "未知错误";
+    const err = raw.toString().trim() || "未知错误";
+    return { ok: false, out: "", err };
+  }
+}
 function getVersion() {
   try { return require("./package.json").version; } catch (e) { return "?"; }
 }
@@ -51,9 +64,9 @@ router.get("/api/version", (req, res) => {
 
 router.get("/api/check-update", (req, res) => {
   const localCommit = gitSync(["rev-parse", "HEAD"], 8000);
-  const fetched = gitSync(["fetch", "origin", "main"], 25000);
-  if (fetched === null) {
-    return res.status(500).json({ ok: false, error: "git fetch 失败（检查网络或 SSH 代理）" });
+  const fetched = gitSyncDetail(["fetch", "origin", "main"], 25000);
+  if (!fetched.ok) {
+    return res.status(500).json({ ok: false, error: "git fetch 失败：" + fetched.err });
   }
   const remoteCommit = gitSync(["rev-parse", "origin/main"], 8000) || gitSync(["rev-parse", "FETCH_HEAD"], 8000);
   if (!localCommit || !remoteCommit) {
@@ -68,9 +81,9 @@ router.get("/api/check-update", (req, res) => {
 
 router.post("/api/update", (req, res) => {
   const before = gitSync(["rev-parse", "HEAD"], 8000);
-  const pull = gitSync(["pull", "origin", "main"], 60000);
-  if (pull === null) {
-    return res.status(200).json({ ok: false, error: "git pull 失败（可能本地有未提交修改）", updated: false });
+  const pull = gitSyncDetail(["pull", "origin", "main"], 60000);
+  if (!pull.ok) {
+    return res.status(200).json({ ok: false, error: "git pull 失败：" + pull.err, updated: false });
   }
   const after = gitSync(["rev-parse", "HEAD"], 8000);
   const updated = !!(before && after && before !== after);
@@ -87,7 +100,7 @@ router.post("/api/update", (req, res) => {
       } catch (e) { /* 哨兵写入失败不阻断更新 */ }
     }
   }
-  res.json({ ok: true, updated, needsRestart: updated, needsNpmInstall, output: pull });
+  res.json({ ok: true, updated, needsRestart: updated, needsNpmInstall, output: pull.out });
 });
 
 router.post("/api/restart", (req, res) => {
