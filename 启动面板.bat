@@ -2,22 +2,13 @@
 cd /d "%~dp0"
 
 REM Find a Python interpreter that can actually create a Tk window.
-REM (import alone is not enough: some managed pythons import tkinter but
-REM  lack a working tcl/tk runtime, which crashes silently under pythonw.)
+REM Preference order: user-installed Python (PATH) first, WorkBuddy managed
+REM pythonw last. (import alone is not enough: some managed pythons import
+REM  tkinter but lack a working tcl/tk runtime, crashing silently under pythonw.)
 
 set "PYTHON="
 
-REM 1) WorkBuddy managed pythonw (any version) - test each
-for /d %%d in ("C:\Users\%USERNAME%\.workbuddy\binaries\python\versions\*") do (
-  if not defined PYTHON (
-    if exist "%%d\pythonw.exe" (
-      "%%d\pythonw.exe" -c "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()" >nul 2>nul
-      if not errorlevel 1 set "PYTHON=%%d\pythonw.exe"
-    )
-  )
-)
-
-REM 2) pythonw in PATH (standard Python install)
+REM 1) pythonw in PATH (standard Python install, e.g. the one the user installed)
 if not defined PYTHON (
   where pythonw >nul 2>nul
   if not errorlevel 1 (
@@ -26,12 +17,22 @@ if not defined PYTHON (
   )
 )
 
-REM 3) python in PATH (shows a console window, but works)
+REM 2) python in PATH (shows a console window, but works)
 if not defined PYTHON (
   where python >nul 2>nul
   if not errorlevel 1 (
     python -c "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()" >nul 2>nul
     if not errorlevel 1 set "PYTHON=python"
+  )
+)
+
+REM 3) WorkBuddy managed pythonw (any version) - last resort
+for /d %%d in ("C:\Users\%USERNAME%\.workbuddy\binaries\python\versions\*") do (
+  if not defined PYTHON (
+    if exist "%%d\pythonw.exe" (
+      "%%d\pythonw.exe" -c "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()" >nul 2>nul
+      if not errorlevel 1 set "PYTHON=%%d\pythonw.exe"
+    )
   )
 )
 
