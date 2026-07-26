@@ -2,29 +2,29 @@
 cd /d "%~dp0"
 
 echo ============================================
-echo   多维表录入 - 拉取更新
+echo   Kdocs Tool - Pull Update
 echo ============================================
 echo.
 
-echo [1/2] 从 GitHub 拉取最新代码...
+echo [1/2] Pulling latest code from GitHub...
 git pull
 if errorlevel 1 (
-  echo [错误] 拉取失败：可能本地有未提交的修改导致冲突
-  echo         请先保存改动，或运行 git status 查看冲突文件
+  echo [ERROR] Pull failed: maybe local uncommitted changes caused a conflict.
+  echo          Save your changes or run "git status" to inspect.
   pause
   exit /b 1
 )
 
 echo.
-echo [2/2] 同步依赖（如 package.json 有变动）...
+echo [2/2] Syncing dependencies (if package.json changed)...
 call npm install
 if errorlevel 1 (
-  echo [警告] npm install 失败，请检查网络后手动重试
+  echo [WARN] npm install failed. Check network and retry manually.
 )
 
 echo.
 echo ============================================
-echo   更新完成！重启服务即可生效（双击 启动面板.bat）
+echo   Update complete! Restart the service to apply.
 echo ============================================
 echo.
 pause
