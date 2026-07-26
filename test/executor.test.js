@@ -25,7 +25,6 @@ function baseDeps(over = {}) {
     aiDescribe: () => ({ intro: "Hazelight 开发的双人合作冒险游戏。", size: "30.7G", coverUrl: "https://cdn.x.com/a.jpg" }),
     downloadCover: async () => { downloadCoverCount++; return "/fake/steam.jpg"; },
     downloadCoverFromUrl: async () => { downloadFromUrlCount++; return "/fake/cover.jpg"; },
-    searchCoverByGameName: async () => null,
     fileBase64: () => "base64data",
     callMcporter: (fn, args) => {
       calls.push({ fn, args });
@@ -136,13 +135,6 @@ test("需求：创建记录字段完整（游戏信息/更新日期/作品展示
   assert.ok(/^\d{4}\/\d{2}\/\d{2}$/.test(f["更新日期"]), "更新日期应为 YYYY/MM/DD");
   assert.ok(f["作品展示"] && f["作品展示"][0].uploadId === "obj1" && f["作品展示"][0].source === "upload_ks3", "应带作品展示附件");
   assert.deepStrictEqual(f["百度网盘"], [{ address: "https://pan.baidu.com/s/b", displayText: "https://pan.baidu.com/s/b" }], "百度网盘应为地址数组");
-});
-
-test("需求：非 Steam 且无 bl 封面 → 仍尝试 SteamGridDB 兜底（不静默放弃）", async () => {
-  const deps = baseDeps({ aiDescribe: () => ({ intro: "x".repeat(20), size: "10G", coverUrl: "" }) });
-  const res = await autoExecute(baseParsed(), null, "/tmp", { deps });
-  const sgdbStep = res.steps.find(s => s.name === "SteamGridDB 封面");
-  assert.ok(sgdbStep, "应有 SteamGridDB 兜底步骤（符合需求：封面必须尝试获取）");
 });
 
 // ── 需求冲突点（已知行为，待用户确认是否改为失败）──

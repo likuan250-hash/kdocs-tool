@@ -7,10 +7,9 @@
     "start": "node server.js",
     "dev": "node --watch server.js",
     "test": "node --test",
-    "test:unit": "node --test test/parser.test.js test/ai.test.js test/executor.test.js test/coverdb.test.js test/update.test.js"
+    "test:unit": "node --test test/parser.test.js test/ai.test.js test/executor.test.js test/update.test.js"
   },
   "dependencies": {
-    "express": "^4.21.0",
-    "steamgriddb": "^2.2.1"
+    "express": "^4.21.0"
   }
 }
