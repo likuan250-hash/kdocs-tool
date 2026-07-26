@@ -2,10 +2,11 @@
 cd /d "%~dp0"
 echo ============================================
 echo   Kdocs Tool - Panel Debug (console mode)
-echo   Errors / traceback will show below.
+echo   Real errors / traceback will show below.
 echo ============================================
 echo.
-python control_panel_tk.py
+set "KDOCS_NO_RELAUNCH=1"
+python "%~dp0control_panel_tk.py"
 echo.
 echo --------------------------------------------
 echo Panel exited with code %errorlevel%.

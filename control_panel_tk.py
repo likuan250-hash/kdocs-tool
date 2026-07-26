@@ -507,11 +507,17 @@ def main():
 
 
 if __name__ == "__main__":
-    # 若以控制台方式运行(被 python 而非 pythonw 启动,会带一个黑窗),
-    # 自动用 pythonw 重新拉起自己消除黑窗。pythonw 下 sys.stdout 为 None,不会重复触发。
-    # 但只在本机存在「能真正创建 Tk 窗口」的 pythonw 时才重拉, 避免某些精简/托管版
-    # pythonw 能 import tkinter 却缺 tcl 运行时导致静默崩溃。
-    if sys.stdout is not None:
+    # 调试/指定模式: 设置 KDOCS_NO_RELAUNCH=1 时直接运行 main(), 不重拉 pythonw,
+    # 便于在控制台看到真实报错(traceback)。debug-panel.bat 使用此模式。
+    if os.environ.get("KDOCS_NO_RELAUNCH"):
+        main()
+    elif sys.stdout is None:
+        # 已以 pythonw 运行(无控制台黑窗): 直接运行
+        main()
+    else:
+        # 控制台方式运行(被 python 启动, 会带一个黑窗):
+        # 自动用「能真正创建 Tk 窗口」的 pythonw 重新拉起自己消除黑窗。
+        # pythonw 下 sys.stdout 为 None, 重拉后不会再触发本分支。
         import shutil
         pw = shutil.which("pythonw") or shutil.which("pythonw.exe")
         if pw:
@@ -525,4 +531,5 @@ if __name__ == "__main__":
                     sys.exit(0)
             except Exception:
                 pass
-    main()
+        # 找不到可用的 pythonw: 退而在控制台直接运行(带黑窗, 但能用)
+        main()

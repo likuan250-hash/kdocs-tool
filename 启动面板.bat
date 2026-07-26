@@ -1,14 +1,30 @@
 @echo off
 cd /d "%~dp0"
 
-REM Find a Python interpreter that can actually create a Tk window.
-REM Preference order: user-installed Python (PATH) first, WorkBuddy managed
-REM pythonw last. (import alone is not enough: some managed pythons import
-REM  tkinter but lack a working tcl/tk runtime, crashing silently under pythonw.)
+REM Find a Python interpreter (pythonw preferred, no black window) that can
+REM actually create a Tk window. Import alone is not enough: some managed
+REM pythons import tkinter but lack a working tcl/tk runtime and crash silently
+REM under pythonw. We test each candidate with a real Tk() round-trip.
+REM
+REM Selection priority:
+REM   1) User-installed Python at the standard location (most reliable, full tcl/tk)
+REM   2) pythonw in PATH
+REM   3) python in PATH (shows a console window, but works)
+REM   4) WorkBuddy managed pythonw (any version) - last resort
 
 set "PYTHON="
 
-REM 1) pythonw in PATH (standard Python install, e.g. the one the user installed)
+REM 1) User-installed Python (standard installer path)
+for /d %%d in ("C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python*") do (
+  if not defined PYTHON (
+    if exist "%%d\pythonw.exe" (
+      "%%d\pythonw.exe" -c "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()" >nul 2>nul
+      if not errorlevel 1 set "PYTHON=%%d\pythonw.exe"
+    )
+  )
+)
+
+REM 2) pythonw in PATH
 if not defined PYTHON (
   where pythonw >nul 2>nul
   if not errorlevel 1 (
@@ -17,7 +33,7 @@ if not defined PYTHON (
   )
 )
 
-REM 2) python in PATH (shows a console window, but works)
+REM 3) python in PATH (console window, but works)
 if not defined PYTHON (
   where python >nul 2>nul
   if not errorlevel 1 (
@@ -26,7 +42,7 @@ if not defined PYTHON (
   )
 )
 
-REM 3) WorkBuddy managed pythonw (any version) - last resort
+REM 4) WorkBuddy managed pythonw (any version) - last resort
 for /d %%d in ("C:\Users\%USERNAME%\.workbuddy\binaries\python\versions\*") do (
   if not defined PYTHON (
     if exist "%%d\pythonw.exe" (
@@ -45,5 +61,7 @@ if not defined PYTHON (
   exit /b 1
 )
 
-REM Launch with the verified interpreter
+REM KDOCS_NO_RELAUNCH: run main() directly in the chosen interpreter (no silent
+REM re-launch into a possibly-broken pythonw). The launcher fully owns selection.
+set "KDOCS_NO_RELAUNCH=1"
 start "" "%PYTHON%" "%~dp0control_panel_tk.py"
