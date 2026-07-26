@@ -14,8 +14,24 @@ import subprocess
 import threading
 import webbrowser
 import urllib.request
-import tkinter as tk
-from tkinter import ttk, scrolledtext
+
+try:
+    import tkinter as tk
+    from tkinter import ttk, scrolledtext
+except Exception as _tk_err:
+    # pythonw 下无控制台, 若 tkinter 缺失会静默退出; 这里用 ctypes 弹窗明确提示, 避免「一闪而过」
+    try:
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            "无法加载图形界面组件 tkinter：\n\n%s\n\n"
+            "原因通常是本机未安装 Python，或安装时未勾选「tcl/tk 与 IDLE」。\n"
+            "请安装 Python（勾选 tcl/tk 与 Add to PATH）后重试，"
+            "或在本机安装 WorkBuddy 后重试。" % _tk_err,
+            "启动面板失败", 0x10)
+    except Exception:
+        pass
+    sys.exit(1)
 
 PROJ = os.path.dirname(os.path.abspath(__file__))
 NODE = os.path.join(
