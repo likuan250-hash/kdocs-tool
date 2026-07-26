@@ -131,11 +131,28 @@ router.post("/api/auto", async (req, res) => {
   if (!text) return res.status(400).json({ error: "请输入游戏信息" });
   const parsed = parseInput(text);
   if (!parsed) return res.status(400).json({ error: "无法解析输入" });
+
+  // SSE 流式进度：逐条推送 step / done / error 事件，让前端实时看到执行到哪一步
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  const send = (obj) => { try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch { /* 客户端已断开 */ } };
+  let clientGone = false;
+  req.on("close", () => { clientGone = true; });
+
   try {
-    const result = await autoExecute(parsed, null, coverDir, { manualCoverUrl });
-    res.json({ ...result, gameName: parsed.gameName });
+    const result = await autoExecute(parsed, null, coverDir, {
+      manualCoverUrl,
+      onStep: (ev) => { if (!clientGone) send(ev); },
+    });
+    if (!clientGone) send({ type: "done", result: { ...result, gameName: parsed.gameName } });
   } catch (e) {
-    res.status(500).json({ error: e.message, gameName: parsed.gameName });
+    if (!clientGone) send({ type: "error", error: e.message });
+  } finally {
+    try { res.end(); } catch { /* 已结束 */ }
   }
 });
 

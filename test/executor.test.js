@@ -134,6 +134,28 @@ test("需求：创建记录字段完整（游戏信息/更新日期/作品展示
 // ── 需求冲突点（已知行为，待用户确认是否改为失败）──
 // 用户需求：bl / 兜底必须给封面。但当前 success 判定为「全成功或跳过」，
 // 封面所有源失败仅记为「跳过」，仍会创建无作品展示的记录。
+test("onStep 实时回调：每步 emit step（带 index），结束 emit done", async () => {
+  const events = [];
+  const deps = baseDeps();
+  const res = await autoExecute(baseParsed({ quarkUrl: "https://pan.quark.cn/s/x" }), null, "/tmp", {
+    deps,
+    onStep: (ev) => events.push(ev),
+  });
+  // 至少应有若干 step 事件 + 一个 done 事件
+  const stepEvents = events.filter(e => e.type === "step");
+  const doneEvents = events.filter(e => e.type === "done");
+  assert.ok(stepEvents.length >= 3, "应至少推送 3 个 step 事件");
+  assert.strictEqual(doneEvents.length, 1, "应恰好推送 1 个 done 事件");
+  // 每个 step 事件都带稳定 index，便于前端原地更新
+  const indices = stepEvents.map(e => e.step.index);
+  assert.ok(indices.every(i => Number.isInteger(i) && i >= 0), "step 事件应带非负 index");
+  // done 事件携带完整结果与 gameName 之外的字段
+  assert.strictEqual(doneEvents[0].result.recordId, "r1");
+  assert.strictEqual(doneEvents[0].result.success, true);
+  // 最终返回结果与回调收到的 done.result 一致
+  assert.strictEqual(res.recordId, "r1");
+});
+
 test("需求GAP：封面所有源失败 → 当前仍判 success 且不含作品展示（待确认）", async () => {
   const deps = baseDeps({ aiDescribe: () => ({ intro: "x".repeat(20), size: "10G", coverUrl: "" }) });
   const res = await autoExecute(baseParsed(), null, "/tmp", { deps });

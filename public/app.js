@@ -159,7 +159,42 @@ copyBtn.onclick = async () => {
   }
 };
 
-// ── 一键执行 ──
+// ── 一键执行（SSE 流式进度，实时看到每一步）──
+const stepEls = []; // 按 index 缓存已渲染的步骤节点，便于「进行中→成功」原地更新
+
+function buildStepDetail(s) {
+  const detailParts = [];
+  if (s.appid) detailParts.push("AppID: " + s.appid);
+  if (s.path) detailParts.push("路径: " + s.path);
+  if (s.size) detailParts.push(s.size);
+  if (s.files) detailParts.push("文件数: " + s.files);
+  if (s.objectId) detailParts.push("ObjectID: " + s.objectId);
+  if (s.recordId) detailParts.push("记录ID: " + s.recordId);
+  if (s.desc) detailParts.push("摘要: " + s.desc.slice(0, 60) + (s.desc.length > 60 ? "…" : ""));
+  if (s.reason) detailParts.push('<span class="err">' + esc(s.reason) + "</span>");
+  if (s.error) detailParts.push('<span class="err">' + esc(s.error) + "</span>");
+  return detailParts.join(" · ");
+}
+
+function renderStep(s) {
+  const icon = s.status === "成功" ? "✅" : s.status === "跳过" ? "⏭️" : s.status === "失败" ? "❌" : "🔄";
+  const detail = buildStepDetail(s);
+  let item = stepEls[s.index];
+  if (!item) {
+    item = document.createElement("div");
+    item.className = "step-item";
+    autoSteps.appendChild(item);
+    stepEls[s.index] = item;
+  }
+  item.innerHTML = '<span class="step-icon">' + icon + '</span><div class="step-body"><div class="step-name">' + esc(s.name) + " — " + s.status + "</div>" + (detail ? '<div class="step-detail">' + detail + "</div>" : "") + "</div>";
+  // 进行中的步骤高亮提示，完成后取消
+  if (s.status === "进行中") {
+    addLog("info", "🔄 进行中：" + s.name);
+  } else {
+    addLog(s.status === "成功" ? "ok" : s.status === "失败" ? "err" : "info", icon + " " + s.name + " — " + s.status);
+  }
+}
+
 autoBtn.onclick = async () => {
   const text = gameInput.value.trim();
   if (!text) { toastMsg("请先粘贴游戏信息", "err"); return; }
@@ -172,55 +207,64 @@ autoBtn.onclick = async () => {
   autoLog.innerHTML = "";
   autoSummary.textContent = "";
   outputCard.classList.remove("show");
+  stepEls.length = 0;
 
   autoResult.classList.add("show");
   addLog("info", "🚀 开始一键执行...");
 
   try {
-    const r = await fetch("/api/auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, coverDir: coverDir.value.trim() || undefined, manualCoverUrl: coverUrl.value.trim() }) });
-    const d = await r.json();
-
-    if (d.error) {
-      addLog("err", "❌ " + d.error);
+    const r = await fetch("/api/auto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, coverDir: coverDir.value.trim() || undefined, manualCoverUrl: coverUrl.value.trim() }),
+    });
+    if (!r.ok && r.headers.get("content-type")?.includes("application/json")) {
+      const d = await r.json();
+      addLog("err", "❌ " + (d.error || r.status));
       autoSummary.className = "result-summary fail";
       autoSummary.textContent = "❌ 执行失败";
       return;
     }
 
-    if (d.gameName) { currentParsed = { ...currentParsed, gameName: d.gameName }; preview.style.display = "block"; }
-
-    if (d.steps) {
-      d.steps.forEach(s => {
-        const icon = s.status === "成功" ? "✅" : s.status === "跳过" ? "⏭️" : "❌";
-        addLog(s.status === "成功" ? "ok" : s.status === "跳过" ? "info" : "err", icon + " " + s.name + " — " + s.status);
-        const item = document.createElement("div");
-        item.className = "step-item";
-        const detailParts = [];
-        if (s.appid) detailParts.push("AppID: " + s.appid);
-        if (s.path) detailParts.push("路径: " + s.path);
-        if (s.size) detailParts.push(s.size);
-        if (s.objectId) detailParts.push("ObjectID: " + s.objectId);
-        if (s.recordId) detailParts.push("记录ID: " + s.recordId);
-        if (s.desc) detailParts.push("摘要: " + s.desc.slice(0, 60) + (s.desc.length > 60 ? "…" : ""));
-        if (s.reason) detailParts.push('<span class="err">' + esc(s.reason) + "</span>");
-        if (s.error) detailParts.push('<span class="err">' + esc(s.error) + "</span>");
-        item.innerHTML = '<span class="step-icon">' + icon + '</span><div class="step-body"><div class="step-name">' + esc(s.name) + " — " + s.status + "</div>" + (detailParts.length ? '<div class="step-detail">' + detailParts.join(" · ") + "</div>" : "") + "</div>";
-        autoSteps.appendChild(item);
-      });
-    }
-
-    if (d.success) {
-      autoSummary.className = "result-summary ok";
-      autoSummary.textContent = "✅ 全部完成！记录 ID: " + (d.recordId || "—");
-      addLog("ok", d.recordId ? "🎉 记录 " + d.recordId + " 创建成功！" : "🎉 全部完成！");
-      if (!currentPrompt && d.gameName) {
-        const pr = parseInput(text);
-        if (pr) currentPrompt = "(一键执行已完成，无需手动操作)";
+    // 解析 SSE 流：每条 data: 是一个 JSON 事件
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let finished = false;
+    while (!finished) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const chunk = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        const line = chunk.split("\n").find(l => l.startsWith("data: "));
+        if (!line) continue;
+        let ev;
+        try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+        if (ev.type === "step") {
+          renderStep(ev.step);
+        } else if (ev.type === "error") {
+          addLog("err", "❌ " + ev.error);
+          autoSummary.className = "result-summary fail";
+          autoSummary.textContent = "❌ 执行异常";
+        } else if (ev.type === "done") {
+          finished = true;
+          const d = ev.result;
+          if (d.gameName) { currentParsed = { ...currentParsed, gameName: d.gameName }; preview.style.display = "block"; }
+          if (d.success) {
+            autoSummary.className = "result-summary ok";
+            autoSummary.textContent = "✅ 全部完成！记录 ID: " + (d.recordId || "—");
+            addLog("ok", d.recordId ? "🎉 记录 " + d.recordId + " 创建成功！" : "🎉 全部完成！");
+            if (!currentPrompt && d.gameName) currentPrompt = "(一键执行已完成，无需手动操作)";
+          } else {
+            autoSummary.className = "result-summary fail";
+            autoSummary.textContent = "⚠️ 部分步骤未成功";
+            addLog("info", "💡 可点击「生成指令」获取完整模板手动执行");
+          }
+        }
       }
-    } else {
-      autoSummary.className = "result-summary fail";
-      autoSummary.textContent = "⚠️ 部分步骤未成功";
-      addLog("info", "💡 可点击「生成指令」获取完整模板手动执行");
     }
   } catch (e) {
     addLog("err", "❌ 请求失败: " + e.message);
