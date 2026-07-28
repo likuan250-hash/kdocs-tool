@@ -461,19 +461,25 @@ class Panel(tk.Tk):
     def _check_browse(self):
         try:
             if os.path.exists(BROWSE_REQ):
+                self.log("[选择目录] 收到 browse_req.json", "info")
                 try:
                     with open(BROWSE_REQ, "r", encoding="utf-8") as f:
                         req = json.load(f)
                     initial = req.get("initial", "") or ""
+                    self.log("[选择目录] 初始目录: %s" % (initial or "(未指定)"), "info")
                     if initial and not os.path.isdir(initial):
                         initial = os.path.dirname(initial)  # 文件或不存在时退到父目录
+                        self.log("[选择目录] 初始目录不存在，退到父目录: %s" % initial, "info")
+                    self.log("[选择目录] 正在弹出文件夹选择框…", "info")
                     chosen = filedialog.askdirectory(
                         initialdir=initial if initial else os.path.expanduser("~"),
                         title="选择封面图片存放目录",
                     )
+                    self.log("[选择目录] 选择结果: %s" % (chosen or "(取消/空)"), "info")
                     with open(BROWSE_RES, "w", encoding="utf-8") as f:
                         json.dump({"dir": chosen or ""}, f, ensure_ascii=False)
                 except Exception as e:
+                    self.log("[选择目录] 弹窗异常: %s" % e, "err")
                     try:
                         with open(BROWSE_RES, "w", encoding="utf-8") as f:
                             json.dump({"dir": "", "error": str(e)}, f, ensure_ascii=False)

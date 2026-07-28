@@ -168,7 +168,7 @@ router.post("/api/browse-dir", async (req, res) => {
     await new Promise((r) => setTimeout(r, 400));
   }
   try { if (fs.existsSync(reqPath)) fs.unlinkSync(reqPath); } catch {}
-  return res.status(500).json({ error: "文件夹选择器超时：请确认控制面板处于打开状态（未选「仅关闭面板」）。" });
+  return res.status(500).json({ error: "文件夹选择器超时：请确认「控制面板程序本身」已关闭并重新打开（仅重启后端服务不会加载新面板代码），且未选择「仅关闭面板(服务后台继续)」。" });
 });
 
 router.post("/api/check-exists", async (req, res) => {
