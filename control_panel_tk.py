@@ -471,10 +471,21 @@ class Panel(tk.Tk):
                         initial = os.path.dirname(initial)  # 文件或不存在时退到父目录
                         self.log("[选择目录] 初始目录不存在，退到父目录: %s" % initial, "info")
                     self.log("[选择目录] 正在弹出文件夹选择框…", "info")
+                    # 弹窗前将面板置顶并抢焦点，确保原生对话框显示在最前面、不被其它窗口遮挡
+                    try:
+                        self.lift()
+                        self.attributes("-topmost", True)
+                        self.focus_force()
+                    except Exception:
+                        pass
                     chosen = filedialog.askdirectory(
                         initialdir=initial if initial else os.path.expanduser("~"),
                         title="选择封面图片存放目录",
                     )
+                    try:
+                        self.attributes("-topmost", False)
+                    except Exception:
+                        pass
                     self.log("[选择目录] 选择结果: %s" % (chosen or "(取消/空)"), "info")
                     with open(BROWSE_RES, "w", encoding="utf-8") as f:
                         json.dump({"dir": chosen or ""}, f, ensure_ascii=False)
