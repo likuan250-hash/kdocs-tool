@@ -7,6 +7,8 @@
 const express = require("express");
 const router = express.Router();
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
 const { execFileSync, spawn } = require("child_process");
 
 const { parseInput } = require("./lib/parser");
@@ -129,33 +131,55 @@ router.get("/api/search-steam", async (req, res) => {
 });
 
 // ── 封面目录选择：弹出系统文件夹选择器，返回绝对路径（本地 Windows 工具）──
-router.post("/api/browse-dir", (req, res) => {
+router.post("/api/browse-dir", async (req, res) => {
   const initial = (req.body && req.body.initial) || "";
-  // 用 COM 的 Shell.Application.BrowseForFolder 弹原生文件夹选择器：从脚本/无界面进程调用时显示最稳定，
-  // 不需要可见父窗口。initial 经环境变量传入，杜绝命令注入。
-  const psScript = [
-    "$shell = New-Object -ComObject Shell.Application",
-    // BrowseForFolder(hwnd, title, options, root)：root=0 从桌面开始，可浏览整棵树
-    "$folder = $shell.BrowseForFolder(0, '选择封面图片存放目录', 0, 0)",
-    "if ($folder -ne $null) { $folder.Self.Path }",
-  ].join("\n");
-  const child = spawn("powershell.exe", ["-NoProfile", "-Command", psScript], {
-    windowsHide: false, // 保留可见控制台窗口，确保文件夹对话框能附着并显示到前台
-    env: Object.assign({}, process.env, { INITIAL_DIR: initial }),
-    timeout: 120000,
-  });
-  let out = "", errOut = "";
-  child.stdout.on("data", (d) => { out += d.toString(); });
-  child.stderr.on("data", (d) => { errOut += d.toString(); });
-  child.on("error", (e) => {
-    res.status(500).json({ error: "启动文件夹选择器失败：" + e.message });
-  });
-  child.on("close", () => {
-    const dir = (out || "").trim();
+  const tmpBase = path.join(os.tmpdir(), `kdocs_browsedir_${Date.now()}_${process.pid}`);
+  const vbsPath = `${tmpBase}.vbs`;
+  const outPath = `${tmpBase}.txt`;
+  // wscript.exe 是 GUI 子系统，不会弹出黑色控制台；结果写入 UTF-16 临时文件，彻底避免 stdout 编码乱码
+  const vbs = [
+    "Dim shell, folder, fso, stream",
+    "Set shell = CreateObject(\"Shell.Application\")",
+    "Set folder = shell.BrowseForFolder(0, \"选择封面图片存放目录\", 1, 0)",
+    "If Not folder Is Nothing Then",
+    "  Set fso = CreateObject(\"Scripting.FileSystemObject\")",
+    "  Set stream = fso.CreateTextFile(WScript.Arguments(0), True, True)",
+    "  stream.Write folder.Self.Path",
+    "  stream.Close",
+    "End If",
+  ].join("\r\n");
+
+  function cleanup() {
+    try { if (fs.existsSync(vbsPath)) fs.unlinkSync(vbsPath); } catch {}
+    try { if (fs.existsSync(outPath)) fs.unlinkSync(outPath); } catch {}
+  }
+
+  try {
+    fs.writeFileSync(vbsPath, "\ufeff" + vbs, "utf16le"); // VBS 含中文，用 UTF-16 BOM
+    await new Promise((resolve, reject) => {
+      const child = spawn("wscript.exe", ["//Nologo", vbsPath, outPath], {
+        windowsHide: true,
+        timeout: 120000,
+      });
+      child.on("error", reject);
+      child.on("exit", (code, signal) => {
+        if (signal) return reject(new Error("文件夹选择器被中断"));
+        resolve();
+      });
+    });
+
+    let dir = "";
+    if (fs.existsSync(outPath)) {
+      const raw = fs.readFileSync(outPath);
+      dir = raw.toString("utf16le").replace(/^\uFEFF/, "").trim();
+    }
+    cleanup();
     if (dir) return res.json({ dir });
-    if (errOut && errOut.trim()) return res.status(500).json({ error: "文件夹选择器异常：" + errOut.trim() });
     return res.json({ dir: "", cancelled: true }); // 用户取消
-  });
+  } catch (e) {
+    cleanup();
+    return res.status(500).json({ error: "打开文件夹选择器失败：" + e.message });
+  }
 });
 
 router.post("/api/check-exists", async (req, res) => {
