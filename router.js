@@ -13,7 +13,7 @@ const { parseInput } = require("./lib/parser");
 const { searchSteamAppId } = require("./lib/steam");
 const { checkBlAvailable, aiDescribe } = require("./lib/ai");
 const { checkKdocsReady } = require("./lib/kdocs");
-const { autoExecute } = require("./lib/executor");
+const { autoExecute, findExistingRecord } = require("./lib/executor");
 
 // 提供静态文件（当独立运行时也保持兼容）
 router.use(express.static(path.join(__dirname, "public")));
@@ -128,8 +128,21 @@ router.get("/api/search-steam", async (req, res) => {
   res.json({ appid: q ? await searchSteamAppId(q) : null });
 });
 
+router.post("/api/check-exists", async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: "请输入游戏信息" });
+  const parsed = parseInput(text);
+  if (!parsed) return res.status(400).json({ error: "无法解析输入" });
+  try {
+    const r = await findExistingRecord(parsed);
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message, exists: false, recordId: null, existingLinks: null });
+  }
+});
+
 router.post("/api/auto", async (req, res) => {
-  const { text, coverDir, manualCoverUrl } = req.body;
+  const { text, coverDir, manualCoverUrl, forceAdd, updateLinks } = req.body;
   if (!text) return res.status(400).json({ error: "请输入游戏信息" });
   const parsed = parseInput(text);
   if (!parsed) return res.status(400).json({ error: "无法解析输入" });
@@ -153,6 +166,8 @@ router.post("/api/auto", async (req, res) => {
   try {
     await autoExecute(parsed, null, coverDir, {
       manualCoverUrl,
+      forceAdd: !!forceAdd,
+      updateLinks: !!updateLinks,
       onStep: (ev) => send(ev),
     });
   } catch (e) {

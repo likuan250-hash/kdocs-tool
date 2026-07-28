@@ -17,7 +17,9 @@ function baseDeps(over = {}) {
   let lastCreate = null;
   let downloadCoverCount = 0;
   let downloadFromUrlCount = 0;
+  let lastUpdate = null;
   const calls = [];
+  const listRecords = over.listRecords || [];
   const deps = {
     calls,
     checkKdocsReady: () => true,
@@ -29,11 +31,13 @@ function baseDeps(over = {}) {
     callMcporter: (fn, args) => {
       calls.push({ fn, args });
       if (fn === "upload_attachment") return { object_id: "obj1" };
+      if (fn === "dbsheet.list_records") return { data: { detail: { records: listRecords } } };
       if (fn === "dbsheet.create_records") lastCreate = args.records[0].fields;
+      if (fn === "dbsheet.update_records") lastUpdate = args.records[0];
       return { data: { records: [{ id: "r1" }] } };
     },
     fs: { statSync: () => ({ size: 1234 }) },
-    _state: () => ({ lastCreate, downloadCoverCount, downloadFromUrlCount, calls }),
+    _state: () => ({ lastCreate, downloadCoverCount, downloadFromUrlCount, calls, lastUpdate }),
     ...over,
   };
   return deps;
@@ -163,4 +167,61 @@ test("需求GAP：封面所有源失败 → 当前仍判 success 且不含作品
   assert.ok(coverSteps.length >= 1 && coverSteps.every(s => s.status === "跳过"), "封面应全部跳过");
   assert.strictEqual(res.success, true, "（已知行为）封面缺失仍判成功，与「必须有封面」需求冲突");
   assert.ok(!("作品展示" in deps._state().lastCreate), "无封面则不应有作品展示");
+});
+
+// ── 查重分支（1.0.18 新增：文档已存在时提示跳过 / 强制新增 / 更新网盘链接）──
+const DUP_REC = { id: "dup1", fields: { "游戏名称": "双影奇境（Split Fiction）", "百度网盘": [{ address: "https://pan.baidu.com/s/old", displayText: "https://pan.baidu.com/s/old" }] } };
+
+test("查重命中且默认（不选强制/更新）→ 跳过（action=skipped，不创建）", async () => {
+  const deps = baseDeps({ listRecords: [DUP_REC] });
+  const res = await autoExecute(baseParsed(), null, "/tmp", { deps });
+  assert.strictEqual(res.action, "skipped");
+  assert.strictEqual(res.recordId, "dup1");
+  assert.strictEqual(res.success, true);
+  const creates = deps._state().calls.filter(c => c.fn === "dbsheet.create_records");
+  assert.strictEqual(creates.length, 0, "命中应跳过创建");
+  const ups = deps._state().calls.filter(c => c.fn === "dbsheet.update_records");
+  assert.strictEqual(ups.length, 0, "命中默认不更新");
+});
+
+test("查重命中 + forceAdd → 仍创建（action=created）", async () => {
+  const deps = baseDeps({ listRecords: [DUP_REC] });
+  const res = await autoExecute(baseParsed(), null, "/tmp", { deps, forceAdd: true });
+  assert.strictEqual(res.action, "created");
+  assert.strictEqual(res.recordId, "r1");
+  const creates = deps._state().calls.filter(c => c.fn === "dbsheet.create_records");
+  assert.strictEqual(creates.length, 1, "强制新增应创建一条");
+});
+
+test("查重命中 + updateLinks → 部分更新网盘链接（action=updated，不创建）", async () => {
+  const deps = baseDeps({ listRecords: [DUP_REC] });
+  const res = await autoExecute(baseParsed({ quarkUrl: "https://pan.quark.cn/s/q" }), null, "/tmp", { deps, updateLinks: true });
+  assert.strictEqual(res.action, "updated");
+  assert.strictEqual(res.recordId, "dup1");
+  const ups = deps._state().calls.filter(c => c.fn === "dbsheet.update_records");
+  assert.strictEqual(ups.length, 1, "应调用 update_records");
+  const upFields = ups[0].args.records[0].fields;
+  assert.ok(upFields["夸克网盘"], "应更新夸克网盘");
+  assert.ok(!("百度网盘" in upFields), "未填百度则不应更新百度（部分更新）");
+  assert.ok(!("游戏介绍" in upFields), "不应动介绍字段（部分更新）");
+  assert.ok(!("游戏名称" in upFields), "不应动游戏名称字段（部分更新）");
+  const creates = deps._state().calls.filter(c => c.fn === "dbsheet.create_records");
+  assert.strictEqual(creates.length, 0, "更新模式不应创建");
+});
+
+test("查重命中 + updateLinks 但本次无网盘链接 → 跳过（action=skipped，不更新）", async () => {
+  const deps = baseDeps({ listRecords: [DUP_REC] });
+  const res = await autoExecute(baseParsed(), null, "/tmp", { deps, updateLinks: true });
+  assert.strictEqual(res.action, "skipped");
+  const ups = deps._state().calls.filter(c => c.fn === "dbsheet.update_records");
+  assert.strictEqual(ups.length, 0, "无链接不应调用 update");
+});
+
+test("查重未命中 → 正常创建（action=created），list_records 先于 create_records", async () => {
+  const deps = baseDeps({ listRecords: [] });
+  const res = await autoExecute(baseParsed(), null, "/tmp", { deps });
+  assert.strictEqual(res.action, "created");
+  const fns = deps._state().calls.filter(c => c.fn === "dbsheet.list_records" || c.fn === "dbsheet.create_records").map(c => c.fn);
+  assert.ok(fns.includes("dbsheet.list_records"), "应先查重");
+  assert.ok(fns.indexOf("dbsheet.list_records") < fns.indexOf("dbsheet.create_records"), "查重先于创建");
 });

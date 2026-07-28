@@ -147,10 +147,38 @@ function renderStep(s) {
   }
 }
 
-autoBtn.onclick = async () => {
-  const text = gameInput.value.trim();
-  if (!text) { toastMsg("请先粘贴游戏信息", "err"); return; }
+// ── 重复确认 modal 元素与互斥逻辑 ──
+const dupMask = $("dupMask"), dupTitle = $("dupTitle"), dupBody = $("dupBody");
+const chkForceAdd = $("chkForceAdd"), chkUpdateLinks = $("chkUpdateLinks");
+const dupCancel = $("dupCancel"), dupContinue = $("dupContinue");
 
+// 两选项互斥（勾一个禁用另一个）
+chkForceAdd.onchange = () => { if (chkForceAdd.checked) chkUpdateLinks.checked = false; };
+chkUpdateLinks.onchange = () => { if (chkUpdateLinks.checked) chkForceAdd.checked = false; };
+
+let _dupText = "";
+function showDupModal(text, d) {
+  _dupText = text;
+  const p = parseInput(text);
+  dupTitle.textContent = `《${p ? p.gameName : "该游戏"}》已存在于文档中`;
+  const links = [];
+  if (d.existingLinks && d.existingLinks.baidu) links.push("百度");
+  if (d.existingLinks && d.existingLinks.quark) links.push("夸克");
+  if (d.existingLinks && d.existingLinks.xunlei) links.push("迅雷");
+  dupBody.innerHTML = `记录 ID：<b>${esc(d.recordId || "")}</b><br>当前已有网盘链接：${links.length ? links.map(l => `<span class="lk">${esc(l)}</span>`).join("") : "（无）"}<br>请选择处理方式（默认跳过）：`;
+  chkForceAdd.checked = false; chkUpdateLinks.checked = false;
+  dupMask.style.display = "grid";
+}
+
+dupCancel.onclick = () => { dupMask.style.display = "none"; addLog("info", "🚫 已取消（保留原记录）"); };
+dupContinue.onclick = () => {
+  dupMask.style.display = "none";
+  runAuto(_dupText, { forceAdd: chkForceAdd.checked, updateLinks: chkUpdateLinks.checked });
+};
+
+// ── 一键执行（SSE 流式进度，实时看到每一步）──
+// 真正执行（可选 forceAdd / updateLinks）
+async function runAuto(text, opts = {}) {
   autoBtn.disabled = true;
   autoBtn.textContent = "⏳ 执行中...";
   autoResult.classList.remove("show");
@@ -160,13 +188,13 @@ autoBtn.onclick = async () => {
   stepEls.length = 0;
 
   autoResult.classList.add("show");
-  addLog("info", "🚀 开始一键执行...");
+  addLog("info", "🚀 开始一键执行..." + (opts.forceAdd ? "（强制新增）" : opts.updateLinks ? "（更新网盘链接）" : ""));
 
   try {
     const r = await fetch("/api/auto", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, coverDir: coverDir.value.trim() || undefined, manualCoverUrl: coverUrl.value.trim() }),
+      body: JSON.stringify({ text, coverDir: coverDir.value.trim() || undefined, manualCoverUrl: coverUrl.value.trim(), forceAdd: !!opts.forceAdd, updateLinks: !!opts.updateLinks }),
     });
     if (!r.ok && r.headers.get("content-type")?.includes("application/json")) {
       const d = await r.json();
@@ -203,13 +231,21 @@ autoBtn.onclick = async () => {
           finished = true;
           const d = ev.result;
           if (d.gameName) { currentParsed = { ...currentParsed, gameName: d.gameName }; preview.style.display = "block"; }
-          if (d.success) {
+          if (!d.success) {
+            autoSummary.className = "result-summary fail";
+            autoSummary.textContent = "⚠️ 部分步骤未成功";
+          } else if (d.action === "skipped") {
+            autoSummary.className = "result-summary ok";
+            autoSummary.textContent = "⏭️ 已跳过（文档中已存在）记录 ID: " + (d.recordId || "—");
+            addLog("ok", "⏭️ 已跳过，文档中已存在该游戏（记录 " + (d.recordId || "") + "）");
+          } else if (d.action === "updated") {
+            autoSummary.className = "result-summary ok";
+            autoSummary.textContent = "✅ 已更新网盘链接 记录 ID: " + (d.recordId || "—");
+            addLog("ok", "🔗 记录 " + (d.recordId || "") + " 网盘链接已更新");
+          } else {
             autoSummary.className = "result-summary ok";
             autoSummary.textContent = "✅ 全部完成！记录 ID: " + (d.recordId || "—");
             addLog("ok", d.recordId ? "🎉 记录 " + d.recordId + " 创建成功！" : "🎉 全部完成！");
-          } else {
-            autoSummary.className = "result-summary fail";
-            autoSummary.textContent = "⚠️ 部分步骤未成功";
           }
         }
       }
@@ -222,6 +258,30 @@ autoBtn.onclick = async () => {
     autoBtn.disabled = false;
     autoBtn.textContent = "🤖 一键执行";
   }
+}
+
+autoBtn.onclick = async () => {
+  const text = gameInput.value.trim();
+  if (!text) { toastMsg("请先粘贴游戏信息", "err"); return; }
+  // 执行前先查重，命中重复则弹确认框
+  autoBtn.disabled = true;
+  autoBtn.textContent = "🔍 查重中...";
+  try {
+    const r = await fetch("/api/check-exists", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.exists) { showDupModal(text, d); return; }
+    }
+  } catch { /* 查重接口异常不阻断，直接执行 */ }
+  finally {
+    autoBtn.disabled = false;
+    autoBtn.textContent = "🤖 一键执行";
+  }
+  runAuto(text);
 };
 
 function addLog(type, msg) {
