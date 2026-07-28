@@ -59,18 +59,26 @@ browseDirBtn.onclick = async () => {
   const oldText = browseDirBtn.textContent;
   browseDirBtn.textContent = "选择中…";
   try {
-    const r = await fetch("/api/browse-dir", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ initial: coverDir.value.trim() || "" }),
-    });
-    const d = await r.json();
-    if (d.dir) {
-      coverDir.value = d.dir;
-    } else if (d.cancelled) {
-      /* 用户取消，保持原值 */
+    // 优先走 Electron 原生对话框（在 tools-hub 桌面应用内运行时可用）
+    if (window.electronAPI && window.electronAPI.pickFolder) {
+      const d = await window.electronAPI.pickFolder();
+      if (d && d.dir) coverDir.value = d.dir;
+      // cancelled 或空：保持原值
     } else {
-      toastMsg("打开文件夹选择器失败：" + (d.error || "未知错误"), "err");
+      // 回退：独立运行时走后端 /api/browse-dir（由 Tkinter 控制面板弹窗）
+      const r = await fetch("/api/browse-dir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initial: coverDir.value.trim() || "" }),
+      });
+      const d = await r.json();
+      if (d.dir) {
+        coverDir.value = d.dir;
+      } else if (d.cancelled) {
+        /* 用户取消，保持原值 */
+      } else {
+        toastMsg("打开文件夹选择器失败：" + (d.error || "未知错误"), "err");
+      }
     }
   } catch (e) {
     toastMsg("无法打开文件夹选择器：" + e.message, "err");
