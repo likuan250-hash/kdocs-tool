@@ -10,6 +10,10 @@ server.err.log
 node-out.log
 _test_args.json
 
+# 运行时 IPC 中转文件（node <-> 控制面板）
+data/browse_req.json
+data/browse_res.json
+
 # 冗余打包（已有解压后的 kdocs-cli-bin/，自包含 CLI）
 kdocs.zip
 kdocs-cli.zip
