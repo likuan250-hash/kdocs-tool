@@ -21,6 +21,12 @@ try:
 except Exception as _tk_err:
     # pythonw 下无控制台, 若 tkinter 缺失会静默退出; 这里用 ctypes 弹窗明确提示, 避免「一闪而过」
     try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "panel.log"), "a", encoding="utf-8") as _lf:
+            _lf.write("[%s] tkinter import FAILED: %s (sys.executable=%s)\n" % (
+                time.strftime("%Y-%m-%d %H:%M:%S"), _tk_err, sys.executable))
+    except Exception:
+        pass
+    try:
         import ctypes
         ctypes.windll.user32.MessageBoxW(
             0,
@@ -507,6 +513,17 @@ def main():
 
 
 if __name__ == "__main__":
+    # 记录启动信息到 panel.log: 即便 pythonw 的 tcl 在 C 层级静默崩溃(无 Python 报错),
+    # 也能从日志看到是哪一路解释器被启动, 便于事后定位「一闪而过」。
+    try:
+        import datetime
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "panel.log"), "a", encoding="utf-8") as _lf:
+            _lf.write("\n[%s] panel launch: sys.executable=%s | KDOCS_NO_RELAUNCH=%s | stdout=%s\n" % (
+                datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                sys.executable, os.environ.get("KDOCS_NO_RELAUNCH", ""),
+                "none" if sys.stdout is None else "console"))
+    except Exception:
+        pass
     # 调试/指定模式: 设置 KDOCS_NO_RELAUNCH=1 时直接运行 main(), 不重拉 pythonw,
     # 便于在控制台看到真实报错(traceback)。debug-panel.bat 使用此模式。
     if os.environ.get("KDOCS_NO_RELAUNCH"):

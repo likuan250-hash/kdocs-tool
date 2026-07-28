@@ -64,4 +64,5 @@ if not defined PYTHON (
 REM KDOCS_NO_RELAUNCH: run main() directly in the chosen interpreter (no silent
 REM re-launch into a possibly-broken pythonw). The launcher fully owns selection.
 set "KDOCS_NO_RELAUNCH=1"
+echo [%date% %time%] BAT launch: PYTHON=%PYTHON% >> "%~dp0panel.log"
 start "" "%PYTHON%" "%~dp0control_panel_tk.py"
