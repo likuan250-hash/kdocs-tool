@@ -19,8 +19,8 @@ const { autoExecute } = require("./lib/executor");
 // 提供静态文件（当独立运行时也保持兼容）
 router.use(express.static(path.join(__dirname, "public")));
 
-router.get("/api/check", (req, res) => {
-  res.json({ kdocsReady: checkKdocsReady(), blAvailable: checkBlAvailable() });
+router.get("/api/check", async (req, res) => {
+  res.json({ kdocsReady: await checkKdocsReady(), blAvailable: await checkBlAvailable() });
 });
 
 // 健康检查端点：控制面板(is_ready)仅靠 HTTP 200 判断服务存活

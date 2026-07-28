@@ -12,9 +12,9 @@ const path = require("path");
 const RUN_INTEGRATION = !!process.env.RUN_INTEGRATION;
 const RUN_KDOCS = !!process.env.RUN_KDOCS_WRITE;
 
-test("集成[真实bl]：介绍不编造、大小非空、封面为合法URL", { skip: !RUN_INTEGRATION }, () => {
+test("集成[真实bl]：介绍不编造、大小非空、封面为合法URL", { skip: !RUN_INTEGRATION }, async () => {
   const { aiDescribe } = require("../lib/ai");
-  const r = aiDescribe("双影奇境", "双影奇境（Split Fiction）", { englishName: "Split Fiction" });
+  const r = await aiDescribe("双影奇境", "双影奇境（Split Fiction）", { englishName: "Split Fiction" });
   assert.ok(r.intro && r.intro.length >= 10, "介绍应非空");
   assert.ok(!/疑似虚构|无法确认|经核实无真实|请勿轻信|非官方渠道/.test(r.intro), "介绍不应含免责声明（符合需求）");
   assert.ok(r.size && !/^(无|未知|未抓取到)?$/i.test(r.size.trim()), "大小应非空（符合需求）");
@@ -28,9 +28,9 @@ test("集成[真实Steam]：cloudflare 源能下载到封面文件", { skip: !RU
   assert.ok(fs.statSync(fp).size > 0, "封面文件应非空");
 });
 
-test("集成[真实kdocs只读]：连通且能列出记录（不写入，避免污染）", { skip: !RUN_KDOCS }, () => {
+test("集成[真实kdocs只读]：连通且能列出记录（不写入，避免污染）", { skip: !RUN_KDOCS }, async () => {
   const kdocs = require("../lib/kdocs");
-  assert.strictEqual(kdocs.checkKdocsReady(), true, "kdocs 应已配置就绪");
-  const r = kdocs.callMcporter("dbsheet.list_records", { sheet_id: 1 });
+  assert.strictEqual(await kdocs.checkKdocsReady(), true, "kdocs 应已配置就绪");
+  const r = await kdocs.callMcporter("dbsheet.list_records", { sheet_id: 1 });
   assert.ok(r, "应能列出已有记录（只读操作）");
 });

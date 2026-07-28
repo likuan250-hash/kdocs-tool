@@ -51,8 +51,8 @@ test("封面 URL 带括号后缀可正确提取", () => {
   assert.strictEqual(r.coverUrl, "https://x.com/a.jpg");
 });
 
-test("aiDescribe：bl 正常返回 → 解析结果透传", () => {
-  const res = aiDescribe("双影奇境", "双影奇境（Split Fiction）", {
+test("aiDescribe：bl 正常返回 → 解析结果透传", async () => {
+  const res = await aiDescribe("双影奇境", "双影奇境（Split Fiction）", {
     runCmd: fakeBlReturning({ content: "介绍：Hazelight 开发的双人合作冒险游戏。\n大小：30.7G\n封面：https://cdn.x.com/a.jpg" }),
   });
   assert.strictEqual(res.intro, "Hazelight 开发的双人合作冒险游戏。");
@@ -60,22 +60,22 @@ test("aiDescribe：bl 正常返回 → 解析结果透传", () => {
   assert.strictEqual(res.coverUrl, "https://cdn.x.com/a.jpg");
 });
 
-test("aiDescribe：首次免责声明 + 二次正常 → 取二次介绍", () => {
+test("aiDescribe：首次免责声明 + 二次正常 → 取二次介绍", async () => {
   let call = 0;
   const runCmd = (cmd) => {
     call++;
     if (call === 1) return JSON.stringify({ choices: [{ message: { content: "介绍：该游戏经核实无真实公开资料，疑似虚构，请勿轻信。\n大小：未抓取到\n封面：" } }] });
     return JSON.stringify({ choices: [{ message: { content: "介绍：Hazelight 开发的双人合作冒险游戏。\n大小：30.7G\n封面：https://cdn.x.com/a.jpg" } }] });
   };
-  const res = aiDescribe("双影奇境", "双影奇境（Split Fiction）", { runCmd, quarkUrl: "https://pan.quark.cn/s/x" });
+  const res = await aiDescribe("双影奇境", "双影奇境（Split Fiction）", { runCmd, quarkUrl: "https://pan.quark.cn/s/x" });
   assert.strictEqual(call, 2);
   assert.strictEqual(res.intro, "Hazelight 开发的双人合作冒险游戏。");
   assert.strictEqual(res.size, "30.7G");
   assert.strictEqual(res.coverUrl, "https://cdn.x.com/a.jpg");
 });
 
-test("aiDescribe：runCmd 抛错 → 兜底原始文本", () => {
-  const res = aiDescribe("双影奇境", "双影奇境（Split Fiction）", {
+test("aiDescribe：runCmd 抛错 → 兜底原始文本", async () => {
+  const res = await aiDescribe("双影奇境", "双影奇境（Split Fiction）", {
     runCmd: () => { throw new Error("bl crash"); },
   });
   assert.strictEqual(res.intro, "双影奇境（Split Fiction）");
