@@ -152,19 +152,24 @@ router.post("/api/auto", async (req, res) => {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  const send = (obj) => { try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch { /* 客户端已断开 */ } };
-  let clientGone = false;
-  req.on("close", () => { clientGone = true; });
+  const send = (obj) => {
+    try {
+      res.write("data: " + JSON.stringify(obj) + "\n\n");
+      if (typeof res.flush === "function") res.flush();
+    } catch { /* 客户端已断开 */ }
+  };
+  // 每 3 秒发一次 SSE 心跳注释，让代理/浏览器保持连接
+  const heartbeat = setInterval(() => { try { res.write(": hb\n\n"); if (typeof res.flush === "function") res.flush(); } catch { /* ignore */ } }, 3000);
 
   try {
-    const result = await autoExecute(parsed, null, coverDir, {
+    await autoExecute(parsed, null, coverDir, {
       manualCoverUrl,
-      onStep: (ev) => { if (!clientGone) send(ev); },
+      onStep: (ev) => send(ev),
     });
-    if (!clientGone) send({ type: "done", result: { ...result, gameName: parsed.gameName } });
   } catch (e) {
-    if (!clientGone) send({ type: "error", error: e.message });
+    send({ type: "error", error: e.message });
   } finally {
+    clearInterval(heartbeat);
     try { res.end(); } catch { /* 已结束 */ }
   }
 });

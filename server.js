@@ -9,7 +9,7 @@ app.use(express.json({ limit: "1mb" }));
 app.use("/", router);
 
   const PORT = process.env.KDOCS_PORT || 3599;
-  app.listen(PORT, "127.0.0.1", async () => {
+  const server = app.listen(PORT, "127.0.0.1", async () => {
     const { checkKdocsReady } = require("./lib/kdocs");
     const { checkBlAvailable } = require("./lib/ai");
     console.log("✅ 多维表智能录入工具已启动");
