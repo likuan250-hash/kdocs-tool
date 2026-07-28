@@ -128,6 +128,47 @@ router.get("/api/search-steam", async (req, res) => {
   res.json({ appid: q ? await searchSteamAppId(q) : null });
 });
 
+// ── 封面目录选择：弹出系统文件夹选择器，返回绝对路径（本地 Windows 工具）──
+router.post("/api/browse-dir", (req, res) => {
+  const initial = (req.body && req.body.initial) || "";
+  // 在 STA 线程里跑 FolderBrowserDialog，避免 MTA 下 OLE 报错；initial 经环境变量传入，杜绝命令注入
+  const psScript = [
+    "Add-Type -AssemblyName System.Windows.Forms",
+    "$rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()",
+    "$rs.ApartmentState = 'STA'",
+    "$rs.Open()",
+    "$ps = [System.Management.Automation.PowerShell]::Create()",
+    "$ps.Runspace = $rs",
+    "[void]$ps.AddScript({",
+    "  $d = New-Object System.Windows.Forms.FolderBrowserDialog",
+    "  $d.ShowNewFolderButton = $true",
+    "  $d.Description = '选择封面图片存放目录'",
+    "  if ($env:INITIAL_DIR -and (Test-Path $env:INITIAL_DIR)) { $d.SelectedPath = $env:INITIAL_DIR }",
+    "  if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath }",
+    "})",
+    "$result = $ps.Invoke()",
+    "if ($result) { $result }",
+    "$rs.Close()",
+  ].join("\n");
+  const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", psScript], {
+    windowsHide: true, // 隐藏瞬时的 PowerShell 控制台，文件夹对话框由 shell 独立显示
+    env: Object.assign({}, process.env, { INITIAL_DIR: initial }),
+    timeout: 180000,
+  });
+  let out = "", errOut = "";
+  child.stdout.on("data", (d) => { out += d.toString(); });
+  child.stderr.on("data", (d) => { errOut += d.toString(); });
+  child.on("error", (e) => {
+    res.status(500).json({ error: "启动文件夹选择器失败：" + e.message });
+  });
+  child.on("close", () => {
+    const dir = (out || "").trim();
+    if (dir) return res.json({ dir });
+    if (errOut && errOut.trim()) return res.status(500).json({ error: "文件夹选择器异常：" + errOut.trim() });
+    return res.json({ dir: "", cancelled: true }); // 用户取消
+  });
+});
+
 router.post("/api/check-exists", async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: "请输入游戏信息" });

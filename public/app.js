@@ -53,6 +53,33 @@ clearBtn.onclick = () => {
   currentParsed = null;
 };
 
+// ── 封面目录选择（打开系统文件夹选择器，回填绝对路径）──
+browseDirBtn.onclick = async () => {
+  browseDirBtn.disabled = true;
+  const oldText = browseDirBtn.textContent;
+  browseDirBtn.textContent = "选择中…";
+  try {
+    const r = await fetch("/api/browse-dir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ initial: coverDir.value.trim() || "" }),
+    });
+    const d = await r.json();
+    if (d.dir) {
+      coverDir.value = d.dir;
+    } else if (d.cancelled) {
+      /* 用户取消，保持原值 */
+    } else {
+      toastMsg("打开文件夹选择器失败：" + (d.error || "未知错误"), "err");
+    }
+  } catch (e) {
+    toastMsg("无法打开文件夹选择器：" + e.message, "err");
+  } finally {
+    browseDirBtn.disabled = false;
+    browseDirBtn.textContent = oldText;
+  }
+};
+
 // ── 预览 ──
 let pt;
 gameInput.oninput = () => { clearTimeout(pt); pt = setTimeout(doPreview, 400); };
