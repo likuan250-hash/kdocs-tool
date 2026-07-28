@@ -32,3 +32,6 @@ __pycache__/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Windows 保留设备名伪文件（bat 中 2>nul 重定向误生成，不可入库）
+nul

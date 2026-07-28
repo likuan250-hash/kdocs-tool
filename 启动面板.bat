@@ -1,68 +1,51 @@
 @echo off
+chcp 65001 >nul 2>nul
 cd /d "%~dp0"
+set "PANEL=%~dp0control_panel_tk.py"
+set "LOG=%~dp0panel.log"
+set "CHOSEN="
 
-REM Find a Python interpreter (pythonw preferred, no black window) that can
-REM actually create a Tk window. Import alone is not enough: some managed
-REM pythons import tkinter but lack a working tcl/tk runtime and crash silently
-REM under pythonw. We test each candidate with a real Tk() round-trip.
-REM
-REM Selection priority:
-REM   1) User-installed Python at the standard location (most reliable, full tcl/tk)
-REM   2) pythonw in PATH
-REM   3) python in PATH (shows a console window, but works)
-REM   4) WorkBuddy managed pythonw (any version) - last resort
-
-set "PYTHON="
-
-REM 1) User-installed Python (standard installer path)
-for /d %%d in ("C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python*") do (
-  if not defined PYTHON (
-    if exist "%%d\pythonw.exe" (
-      "%%d\pythonw.exe" -c "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()" >nul 2>nul
-      if not errorlevel 1 set "PYTHON=%%d\pythonw.exe"
-    )
-  )
-)
-
-REM 2) pythonw in PATH
-if not defined PYTHON (
-  where pythonw >nul 2>nul
-  if not errorlevel 1 (
-    pythonw -c "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()" >nul 2>nul
-    if not errorlevel 1 set "PYTHON=pythonw"
-  )
-)
-
-REM 3) python in PATH (console window, but works)
-if not defined PYTHON (
-  where python >nul 2>nul
-  if not errorlevel 1 (
-    python -c "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()" >nul 2>nul
-    if not errorlevel 1 set "PYTHON=python"
-  )
-)
-
-REM 4) WorkBuddy managed pythonw (any version) - last resort
+REM 1) PATH pythonw (no console window)
+call :try "pythonw"
+if defined CHOSEN goto :launch
+REM 2) PATH python (console window, but functional)
+call :try "python"
+if defined CHOSEN goto :launch
+REM 3) User-installed Python (common locations)
+call :trypath "C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python313\pythonw.exe"
+if defined CHOSEN goto :launch
+call :trypath "C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python313\python.exe"
+if defined CHOSEN goto :launch
+call :trypath "C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python312\pythonw.exe"
+if defined CHOSEN goto :launch
+call :trypath "C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python312\python.exe"
+if defined CHOSEN goto :launch
+REM 4) WorkBuddy managed pythonw (any version, last resort)
 for /d %%d in ("C:\Users\%USERNAME%\.workbuddy\binaries\python\versions\*") do (
-  if not defined PYTHON (
-    if exist "%%d\pythonw.exe" (
-      "%%d\pythonw.exe" -c "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()" >nul 2>nul
-      if not errorlevel 1 set "PYTHON=%%d\pythonw.exe"
-    )
-  )
+  if not defined CHOSEN call :trypath "%%d\pythonw.exe"
 )
+if defined CHOSEN goto :launch
 
-if not defined PYTHON (
-  powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.MessageBox]::Show('Python / tkinter not found. The launch panel cannot start.\n\nInstall Python with tcl/tk checked, or install WorkBuddy, then try again.', 'Launch Panel Failed', 0x10)" >nul 2>nul
-  if errorlevel 1 (
-    echo [ERROR] No usable Python interpreter (tkinter). Install Python or WorkBuddy.
-    pause
-  )
-  exit /b 1
-)
+echo Python/tkinter not found or cannot create a window. > "%LOG%"
+start "" cmd /c "echo Python not found or cannot create Tk window. Install Python with tcl/tk + Add to PATH.&& pause"
+exit /b 1
 
-REM KDOCS_NO_RELAUNCH: run main() directly in the chosen interpreter (no silent
-REM re-launch into a possibly-broken pythonw). The launcher fully owns selection.
+:launch
+echo [%DATE% %TIME%] launcher chose: %CHOSEN% >> "%LOG%"
 set "KDOCS_NO_RELAUNCH=1"
-echo [%date% %time%] BAT launch: PYTHON=%PYTHON% >> "%~dp0panel.log"
-start "" "%PYTHON%" "%~dp0control_panel_tk.py"
+start "" "%CHOSEN%" "%PANEL%"
+exit /b 0
+
+:try
+set "P="
+for /f "delims=" %%i in ('where %1 2^>nul') do (
+  if not defined P set "P=%%i"
+)
+if defined P call :trypath "%P%"
+goto :eof
+
+:trypath
+if not exist "%~1" goto :eof
+"%~1" -c "import tkinter; r=tkinter.Tk(); r.withdraw(); r.destroy()" >nul 2>nul
+if not errorlevel 1 set "CHOSEN=%~1"
+goto :eof
