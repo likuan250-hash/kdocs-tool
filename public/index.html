@@ -121,6 +121,17 @@
     textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,92,255,0.25); }
     textarea::placeholder { color: var(--text-dim); opacity: 0.6; }
 
+    .input-wrap { position: relative; }
+    .clear-corner {
+      position: absolute; top: 10px; right: 10px; z-index: 2;
+      width: auto; padding: 5px 12px; font-size: 12px;
+      border-radius: 10px; cursor: pointer;
+      border: 1px solid var(--glass-border); background: var(--glass-bg);
+      color: var(--text-dim); backdrop-filter: blur(12px);
+      opacity: 0.75; transition: opacity 0.2s ease, color 0.2s ease, background 0.2s ease;
+    }
+    .clear-corner:hover { opacity: 1; color: var(--text); background: rgba(255,255,255,0.12); }
+
     .input-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 12px; align-items: center; margin-top: 14px; }
     .input-row label { margin: 0; white-space: nowrap; }
     .input-row .browse { white-space: nowrap; }
@@ -141,25 +152,11 @@
 
     .toolbar { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; align-items: center; }
     .toolbar .btn { width: auto; padding: 11px 20px; font-size: 14px; }
-    .example-toggle { color: var(--accent-2); cursor: pointer; font-size: 13px; user-select: none; }
-    .example-toggle:hover { text-decoration: underline; }
 
     .preview-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: 14px; line-height: 2.1; }
     .preview-grid .label { color: var(--text-dim); white-space: nowrap; }
     .preview-grid .value { color: var(--text); word-break: break-all; }
     .preview-grid .tag { display: inline-block; padding: 1px 9px; background: rgba(124,92,255,0.18); color: #c4b5ff; border-radius: 6px; font-size: 12px; margin: 2px 3px; }
-
-    .prompt-output { display: none; margin-top: 12px; }
-    .prompt-output.show { display: block; }
-    .prompt-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .prompt-header .label { color: var(--text-dim); font-size: 14px; }
-    pre {
-      background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 12px;
-      padding: 16px; font-family: "Cascadia Code", "JetBrains Mono", monospace; font-size: 13px;
-      line-height: 1.6; color: var(--text); overflow-x: auto; white-space: pre-wrap;
-      word-break: break-word; max-height: 420px; overflow-y: auto; user-select: all;
-    }
-    [data-theme="light"] pre { background: rgba(255,255,255,0.5); }
 
     .auto-result { display: none; }
     .auto-result.show { display: block; }
@@ -181,9 +178,6 @@
     .log-area .line.info { color: var(--text-dim); }
     .log-area .line.ok { color: var(--ok); }
     .log-area .line.err { color: var(--err); }
-
-    .example-box { margin-top: 12px; padding: 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 12px; font-family: monospace; font-size: 13px; line-height: 1.7; color: var(--text-dim); white-space: pre-wrap; display: none; }
-    [data-theme="light"] .example-box { background: rgba(255,255,255,0.5); }
 
     .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); color: #fff; padding: 10px 24px; border-radius: 10px; font-size: 14px; font-weight: 500; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; }
     .toast.show { opacity: 1; }
@@ -220,7 +214,10 @@
     <h2>📝 游戏信息</h2>
     <div class="hint" style="margin-bottom:14px">粘贴第一行「游戏名称 + 描述 + 标签」，后续行各网盘链接。非 Steam 游戏请务必在下方填写「封面链接」，否则不会生成宣传图。</div>
     <label>游戏信息文本</label>
-    <textarea id="gameInput" placeholder="第一行：游戏名称 + 描述 + 标签&#10;后续行：各网盘链接&#10;可选：封面链接 https://..."></textarea>
+    <div class="input-wrap">
+      <textarea id="gameInput" placeholder="第一行：游戏名称 + 描述 + 标签&#10;后续行：各网盘链接&#10;可选：封面链接 https://..."></textarea>
+      <button class="clear-corner" id="clearBtn">🗑️ 清空</button>
+    </div>
 
     <div class="input-row">
       <label>📁 封面目录</label>
@@ -235,14 +232,7 @@
 
     <div class="toolbar">
       <button class="btn" id="autoBtn">🤖 一键执行</button>
-      <button class="btn ghost" id="generateBtn">📤 生成指令</button>
-      <button class="btn ghost" id="clearBtn">🗑️ 清空</button>
-      <span class="example-toggle" id="exampleToggle">📖 示例</span>
     </div>
-    <div class="example-box" id="exampleContent">尼尔：机械纪元（NieR：Automata）年度版 完美汉化+全DLC+XG器+原声原画集 免安装硬盘版 30.7G
-链接: https://pan.baidu.com/s/1vFSqFC-PSYAsQgPiF3WSfQ?pwd=8888
-链接：https://pan.quark.cn/s/8e10bf6c8284
-链接：https://pan.xunlei.com/s/VOyCRBYUC9NzzA36_TfMF8rNA1?pwd=azrt#</div>
   </div>
 
   <div class="panel" id="preview" style="display:none;">
@@ -255,14 +245,6 @@
     <div id="autoSteps"></div>
     <div class="result-summary" id="autoSummary"></div>
     <div class="log-area" id="autoLog"></div>
-  </div>
-
-  <div class="panel prompt-output" id="outputCard">
-    <div class="prompt-header">
-      <span class="label">📤 指令模板（可发给智能体手动执行）</span>
-      <button class="btn ghost" id="copyBtn" style="padding:8px 16px;font-size:13px;width:auto;">📋 复制</button>
-    </div>
-    <pre id="promptContent"></pre>
   </div>
 
 </div>

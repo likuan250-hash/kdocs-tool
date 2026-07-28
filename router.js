@@ -13,7 +13,6 @@ const { parseInput } = require("./lib/parser");
 const { searchSteamAppId } = require("./lib/steam");
 const { checkBlAvailable, aiDescribe } = require("./lib/ai");
 const { checkKdocsReady } = require("./lib/kdocs");
-const { buildPrompt } = require("./lib/prompt");
 const { autoExecute } = require("./lib/executor");
 
 // 提供静态文件（当独立运行时也保持兼容）
@@ -127,16 +126,6 @@ router.post("/api/parse", (req, res) => {
 router.get("/api/search-steam", async (req, res) => {
   const { q } = req.query;
   res.json({ appid: q ? await searchSteamAppId(q) : null });
-});
-
-router.post("/api/generate", async (req, res) => {
-  const { text, manualCoverUrl } = req.body;
-  if (!text) return res.status(400).json({ error: "请输入游戏信息" });
-  const parsed = parseInput(text);
-  if (!parsed) return res.status(400).json({ error: "无法解析输入" });
-  // 先搜 Steam，让生成指令里的封面/标签说明与实际一致
-  const steamAppId = await searchSteamAppId(parsed.gameName);
-  res.json({ prompt: buildPrompt(parsed, steamAppId, (manualCoverUrl || "").trim()), parsed });
 });
 
 router.post("/api/auto", async (req, res) => {

@@ -1,14 +1,12 @@
 ﻿const $ = id => document.getElementById(id);
 const gameInput = $("gameInput"), coverUrl = $("coverUrl");
 const autoBtn = $("autoBtn"), coverDir = $("coverDir"), browseDirBtn = $("browseDirBtn");
-const generateBtn = $("generateBtn"), clearBtn = $("clearBtn");
+const clearBtn = $("clearBtn");
 const preview = $("preview"), previewContent = $("previewContent");
-const outputCard = $("outputCard"), promptContent = $("promptContent"), copyBtn = $("copyBtn");
 const autoResult = $("autoResult"), autoSteps = $("autoSteps"), autoSummary = $("autoSummary"), autoLog = $("autoLog");
 const toast = $("toast"), chipKdocs = $("chipKdocs"), chipBl = $("chipBl");
-const exampleToggle = $("exampleToggle"), exampleContent = $("exampleContent");
 
-let currentParsed = null, currentPrompt = "";
+let currentParsed = null;
 
 // ── 主题切换（与网盘转存中转台统一，持久化到 localStorage）──
 const themeBtn = $("themeBtn");
@@ -46,22 +44,13 @@ async function initCheck() {
 }
 initCheck();
 
-// ── 示例 ──
-exampleToggle.onclick = () => {
-  const show = exampleContent.style.display !== "block";
-  exampleContent.style.display = show ? "block" : "none";
-  exampleToggle.textContent = show ? "📖 收起" : "📖 示例";
-};
-
-// ── 清空 ──
+// ── 清空（输入框右上角）──
 clearBtn.onclick = () => {
   gameInput.value = "";
   coverUrl.value = "";
   preview.style.display = "none";
-  outputCard.classList.remove("show");
   autoResult.classList.remove("show");
   currentParsed = null;
-  currentPrompt = "";
 };
 
 // ── 预览 ──
@@ -122,43 +111,6 @@ function renderPreview(p) {
 
 function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
-// ── 生成指令 ──
-generateBtn.onclick = async () => {
-  const text = gameInput.value.trim();
-  if (!text) { toastMsg("请先粘贴游戏信息", "err"); return; }
-  generateBtn.disabled = true;
-  generateBtn.textContent = "⏳";
-  outputCard.classList.remove("show");
-  try {
-    const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, manualCoverUrl: coverUrl.value.trim() }) });
-    const d = await r.json();
-    if (d.error) { toastMsg(d.error, "err"); return; }
-    currentParsed = d.parsed;
-    currentPrompt = d.prompt;
-    preview.style.display = "block";
-    renderPreview(d.parsed);
-    promptContent.textContent = d.prompt;
-    outputCard.classList.add("show");
-    toastMsg("✅ 指令已生成");
-  } catch (e) { toastMsg("失败: " + e.message, "err"); }
-  finally { generateBtn.disabled = false; generateBtn.textContent = "📤 生成指令"; }
-};
-
-// ── 复制 ──
-copyBtn.onclick = async () => {
-  if (!currentPrompt) { toastMsg("请先生成指令", "err"); return; }
-  try { await navigator.clipboard.writeText(currentPrompt); toastMsg("✅ 已复制"); }
-  catch {
-    const ta = document.createElement("textarea");
-    ta.value = currentPrompt;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    document.body.removeChild(ta);
-    toastMsg("✅ 已复制");
-  }
-};
-
 // ── 一键执行（SSE 流式进度，实时看到每一步）──
 const stepEls = []; // 按 index 缓存已渲染的步骤节点，便于「进行中→成功」原地更新
 
@@ -201,12 +153,10 @@ autoBtn.onclick = async () => {
 
   autoBtn.disabled = true;
   autoBtn.textContent = "⏳ 执行中...";
-  generateBtn.disabled = true;
   autoResult.classList.remove("show");
   autoSteps.innerHTML = "";
   autoLog.innerHTML = "";
   autoSummary.textContent = "";
-  outputCard.classList.remove("show");
   stepEls.length = 0;
 
   autoResult.classList.add("show");
@@ -257,11 +207,9 @@ autoBtn.onclick = async () => {
             autoSummary.className = "result-summary ok";
             autoSummary.textContent = "✅ 全部完成！记录 ID: " + (d.recordId || "—");
             addLog("ok", d.recordId ? "🎉 记录 " + d.recordId + " 创建成功！" : "🎉 全部完成！");
-            if (!currentPrompt && d.gameName) currentPrompt = "(一键执行已完成，无需手动操作)";
           } else {
             autoSummary.className = "result-summary fail";
             autoSummary.textContent = "⚠️ 部分步骤未成功";
-            addLog("info", "💡 可点击「生成指令」获取完整模板手动执行");
           }
         }
       }
@@ -273,7 +221,6 @@ autoBtn.onclick = async () => {
   } finally {
     autoBtn.disabled = false;
     autoBtn.textContent = "🤖 一键执行";
-    generateBtn.disabled = false;
   }
 };
 
