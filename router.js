@@ -130,56 +130,45 @@ router.get("/api/search-steam", async (req, res) => {
   res.json({ appid: q ? await searchSteamAppId(q) : null });
 });
 
-// ── 封面目录选择：弹出系统文件夹选择器，返回绝对路径（本地 Windows 工具）──
+// ── 封面目录选择：由 Tkinter 控制面板弹原生文件夹选择器 ──
+// 根因：Node 服务端进程（被 CREATE_NO_WINDOW 拉起、无可见窗口）直接 spawn 的 GUI 对话框会被
+// Windows 窗口站/桌面隔离，导致对话框不显示（1.0.19/1.0.21 均因此失败）；而 powershell 可见控制台
+// 能弹（1.0.20）但带黑框+中文乱码。正确做法：对话框必须由运行在交互式桌面、自身有窗口的进程弹出——
+// 即本项目的 Tkinter 控制面板。Node 仅通过 data/browse_req.json / browse_res.json 与面板做中转。
 router.post("/api/browse-dir", async (req, res) => {
   const initial = (req.body && req.body.initial) || "";
-  const tmpBase = path.join(os.tmpdir(), `kdocs_browsedir_${Date.now()}_${process.pid}`);
-  const vbsPath = `${tmpBase}.vbs`;
-  const outPath = `${tmpBase}.txt`;
-  // wscript.exe 是 GUI 子系统，不会弹出黑色控制台；结果写入 UTF-16 临时文件，彻底避免 stdout 编码乱码
-  const vbs = [
-    "Dim shell, folder, fso, stream",
-    "Set shell = CreateObject(\"Shell.Application\")",
-    "Set folder = shell.BrowseForFolder(0, \"选择封面图片存放目录\", 1, 0)",
-    "If Not folder Is Nothing Then",
-    "  Set fso = CreateObject(\"Scripting.FileSystemObject\")",
-    "  Set stream = fso.CreateTextFile(WScript.Arguments(0), True, True)",
-    "  stream.Write folder.Self.Path",
-    "  stream.Close",
-    "End If",
-  ].join("\r\n");
-
-  function cleanup() {
-    try { if (fs.existsSync(vbsPath)) fs.unlinkSync(vbsPath); } catch {}
-    try { if (fs.existsSync(outPath)) fs.unlinkSync(outPath); } catch {}
-  }
+  const dataDir = path.join(__dirname, "data");
+  try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
+  const reqPath = path.join(dataDir, "browse_req.json");
+  const resPath = path.join(dataDir, "browse_res.json");
+  try { if (fs.existsSync(resPath)) fs.unlinkSync(resPath); } catch {}
 
   try {
-    fs.writeFileSync(vbsPath, "\ufeff" + vbs, "utf16le"); // VBS 含中文，用 UTF-16 BOM
-    await new Promise((resolve, reject) => {
-      const child = spawn("wscript.exe", ["//Nologo", vbsPath, outPath], {
-        windowsHide: true,
-        timeout: 120000,
-      });
-      child.on("error", reject);
-      child.on("exit", (code, signal) => {
-        if (signal) return reject(new Error("文件夹选择器被中断"));
-        resolve();
-      });
-    });
-
-    let dir = "";
-    if (fs.existsSync(outPath)) {
-      const raw = fs.readFileSync(outPath);
-      dir = raw.toString("utf16le").replace(/^\uFEFF/, "").trim();
-    }
-    cleanup();
-    if (dir) return res.json({ dir });
-    return res.json({ dir: "", cancelled: true }); // 用户取消
+    fs.writeFileSync(reqPath, JSON.stringify({ initial }), "utf8");
   } catch (e) {
-    cleanup();
-    return res.status(500).json({ error: "打开文件夹选择器失败：" + e.message });
+    return res.status(500).json({ error: "无法写入文件夹选择请求：" + e.message });
   }
+
+  const deadline = Date.now() + 120000;
+  while (Date.now() < deadline) {
+    if (fs.existsSync(resPath)) {
+      try {
+        const out = JSON.parse(fs.readFileSync(resPath, "utf8"));
+        try { fs.unlinkSync(resPath); } catch {}
+        try { if (fs.existsSync(reqPath)) fs.unlinkSync(reqPath); } catch {}
+        if (out.error) return res.status(500).json({ error: "文件夹选择器异常：" + out.error });
+        const dir = (out.dir || "").trim();
+        if (dir) return res.json({ dir });
+        return res.json({ dir: "", cancelled: true }); // 用户取消
+      } catch (e) {
+        try { fs.unlinkSync(resPath); } catch {}
+        return res.status(500).json({ error: "读取选择结果失败：" + e.message });
+      }
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  try { if (fs.existsSync(reqPath)) fs.unlinkSync(reqPath); } catch {}
+  return res.status(500).json({ error: "文件夹选择器超时：请确认控制面板处于打开状态（未选「仅关闭面板」）。" });
 });
 
 router.post("/api/check-exists", async (req, res) => {

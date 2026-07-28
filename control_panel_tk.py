@@ -14,10 +14,11 @@ import subprocess
 import threading
 import webbrowser
 import urllib.request
+import json
 
 try:
     import tkinter as tk
-    from tkinter import ttk, scrolledtext
+    from tkinter import ttk, scrolledtext, filedialog
 except Exception as _tk_err:
     # pythonw 下无控制台, 若 tkinter 缺失会静默退出; 这里用 ctypes 弹窗明确提示, 避免「一闪而过」
     try:
@@ -46,6 +47,9 @@ NODE = os.path.join(
 )
 SERVER_JS = os.path.join(PROJ, "server.js")
 PORT = 3599
+# 文件夹选择请求/结果中转文件：node 写入请求，面板在主线程弹原生对话框并写回结果
+BROWSE_REQ = os.path.join(PROJ, "data", "browse_req.json")
+BROWSE_RES = os.path.join(PROJ, "data", "browse_res.json")
 DETACHED = 0x00000008        # DETACHED_PROCESS
 NEW_PROC_GROUP = 0x00000200  # CREATE_NEW_PROCESS_GROUP
 CREATE_NO_WINDOW = 0x08000000 # CREATE_NO_WINDOW (隐藏子进程控制台黑窗)
@@ -316,6 +320,7 @@ class Panel(tk.Tk):
         self.busy = False
         self._build()
         self.poll()
+        self._check_browse()
         self.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def _btn(self, parent, text, color, hover, cmd):
@@ -451,6 +456,37 @@ class Panel(tk.Tk):
     def _run(self, fn):
         fn(self)
         self.after(0, lambda: self._set_busy(False))
+
+    # ── 文件夹选择中转：node 写入 browse_req.json 后，由面板(交互式桌面、有窗口)弹原生对话框 ──
+    def _check_browse(self):
+        try:
+            if os.path.exists(BROWSE_REQ):
+                try:
+                    with open(BROWSE_REQ, "r", encoding="utf-8") as f:
+                        req = json.load(f)
+                    initial = req.get("initial", "") or ""
+                    if initial and not os.path.isdir(initial):
+                        initial = os.path.dirname(initial)  # 文件或不存在时退到父目录
+                    chosen = filedialog.askdirectory(
+                        initialdir=initial if initial else os.path.expanduser("~"),
+                        title="选择封面图片存放目录",
+                    )
+                    with open(BROWSE_RES, "w", encoding="utf-8") as f:
+                        json.dump({"dir": chosen or ""}, f, ensure_ascii=False)
+                except Exception as e:
+                    try:
+                        with open(BROWSE_RES, "w", encoding="utf-8") as f:
+                            json.dump({"dir": "", "error": str(e)}, f, ensure_ascii=False)
+                    except Exception:
+                        pass
+                finally:
+                    try:
+                        os.remove(BROWSE_REQ)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        self.after(400, self._check_browse)
 
     def on_open(self):
         open_web()
